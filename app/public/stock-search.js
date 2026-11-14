@@ -68,6 +68,8 @@
     open(query);
   });
 
+  window.StockModal = { open };
+
   $('stock-close').addEventListener('click', () => modal.close());
   // Click on the backdrop closes the modal.
   modal.addEventListener('click', (e) => {

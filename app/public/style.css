@@ -155,6 +155,11 @@ h1, h2, h3 { margin: 0; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table .symbol { display: block; font-weight: 600; }
+.table button.symbol {
+  border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: inherit;
+  cursor: pointer; text-align: left;
+}
+.table button.symbol:hover { text-decoration: underline; }
 .table .name { display: block; color: var(--text-2); font-size: 0.8rem; }
 .table .block { display: block; }
 

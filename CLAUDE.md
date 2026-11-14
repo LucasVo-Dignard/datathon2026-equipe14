@@ -61,6 +61,11 @@ creates or deletes AWS resources.
   `.env-dev`. Work in a dev environment by default. Prod needs
   `-var confirm_prod=true` (Terraform), `--env prod` (`db/migrate.py`) or
   `TF_WORKSPACE=default` (scripts): only touch it when asked.
+- Terraform does not deploy app code. After changing the app (`app/`, `src/`,
+  `package.json`, `Dockerfile`), redeploy it to the dev server with
+  `./scripts/deploy-app.sh` (builds the image, pushes it to ECR and restarts
+  the container on the EC2), then check it works. Batch job changes go
+  through `./scripts/deploy-batch.sh`.
 - Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
   (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
   `terraform destroy` does not delete it).
