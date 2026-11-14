@@ -6,7 +6,9 @@ Terraform that creates:
 - a security group that allows inbound traffic **only from an IP allowlist**:
   your own IP (detected automatically) plus anything in `allowed_cidrs`
 - a `t3.micro` Amazon Linux 2023 instance with an 8 GiB encrypted disk,
-  IMDSv2 enforced, running the chatbot (`../app`, Node.js) on port 80
+  IMDSv2 enforced, running the app container (`../app`, Node.js) on port 80
+- a private ECR repository for the app image (`ecr.tf`), with pull access for
+  the instance only and a lifecycle policy keeping the 10 latest images
 - an Elastic IP, so the public IP never changes
 - a generated SSH key (SSH stays closed unless `enable_ssh = true`)
 
@@ -72,8 +74,30 @@ open the URL. If your IP changes (new network), run `terraform apply` again.
   is still billed (about $0.005/h) while the instance is stopped.
 - Remove everything: `terraform destroy`.
 
-## Updating the chatbot
+## Deploying the app
 
-The app in `../app` is embedded in the instance's `user_data`. Any change to
-it makes `terraform apply` **recreate the instance**. The public IP stays the
-same (Elastic IP), but the chat data (`/var/lib/chatbot/db.json`) is reset. Fine for a prototype.
+The app ships as a Docker image (`../Dockerfile`) in ECR. `user_data` only
+installs Docker and a systemd unit (`chatbot.service`) that logs in to ECR,
+pulls the image and runs it, so the app's size no longer matters (the old
+16 KB `user_data` limit is gone).
+
+```bash
+set -a; source ../.env-aws; set +a
+./scripts/deploy-app.sh        # from the repo root
+```
+
+The script builds the image for `linux/amd64` (Docker with buildx needed; on a
+Mac, `colima start --vm-type vz --vz-rosetta` works), pushes it with the git
+SHA and `latest` tags, then restarts the service through SSM (no SSH). The
+instance is **not** recreated, so the prototype data in `/var/lib/chatbot`
+(users, sessions, chats) is kept.
+
+- Roll back: rerun the script from an older commit, or set `app_image_tag` to
+  an older SHA and apply (that one recreates the instance).
+- Extra environment for the container (e.g. `DATABASE_URL`) goes in
+  `/etc/chatbot.env` on the instance, never in Git.
+- Right after a fresh instance boots, the service retries every 15 s until an
+  image exists in ECR, so the order of apply and first deploy doesn't matter.
+
+Changing `user_data.sh.tftpl` or `app_image_tag` still recreates the instance
+(same Elastic IP, data in `/var/lib/chatbot` reset).

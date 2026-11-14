@@ -69,3 +69,9 @@ variable "enable_ssh" {
   type        = bool
   default     = false
 }
+
+variable "app_image_tag" {
+  description = "Tag of the app image in ECR that the server runs. deploy-app.sh moves \"latest\" on every deploy; pin a git SHA to roll back."
+  type        = string
+  default     = "latest"
+}

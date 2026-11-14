@@ -1,41 +1,40 @@
 #!/bin/bash
-# Runs once on first boot: installs Node.js and runs the chatbot (../app) on port 80.
-# Rendered by Terraform (templatefile): the app files are embedded as quoted
-# heredocs, and the whole script is gzipped (cloud-init decompresses it).
+# Runs once on first boot: installs Docker and runs the web app image from ECR
+# on port 80. The app code is NOT embedded here (no 16 KB limit): it ships as
+# the image built by ../scripts/deploy-app.sh.
+#
+# Redeploying the app does not recreate the instance: deploy-app.sh pushes a new
+# image and restarts the service, which pulls it again (ExecStartPre).
 set -euxo pipefail
 
 dnf update -y
-dnf install -y nodejs22 || dnf install -y nodejs
-NODE_BIN="$(command -v node || command -v node-22)"
+dnf install -y docker
+systemctl enable --now docker
 
-APP_DIR=/opt/chatbot
-rm -rf "$APP_DIR"
-%{ for f in files ~}
-mkdir -p "$(dirname "$APP_DIR/${f.path}")"
-cat > "$APP_DIR/${f.path}" <<'${eof}'
-${f.content}
-${eof}
-%{ endfor ~}
-chmod -R a+rX "$APP_DIR"
+# Prototype JSON data (users, sessions, chats), kept across app redeploys.
+# uid 1000 = the "node" user inside the image.
+install -d -o 1000 -g 1000 -m 700 /var/lib/chatbot
 
-cat > /etc/systemd/system/chatbot.service <<UNIT
+# Extra environment for the container (e.g. DATABASE_URL later). Not in Git.
+install -m 600 /dev/null /etc/chatbot.env
+
+cat > /etc/systemd/system/chatbot.service <<'UNIT'
 [Unit]
-Description=Chatbot prototype
-After=network-online.target
+Description=Web app container (${image})
+After=docker.service network-online.target
+Requires=docker.service
 Wants=network-online.target
+# Keep retrying forever: the image may be pushed after the instance boots.
+StartLimitIntervalSec=0
 
 [Service]
-ExecStart=$NODE_BIN $APP_DIR/server.js
-Environment=PORT=80
-Environment=DATA_FILE=/var/lib/chatbot/db.json
-DynamicUser=yes
-StateDirectory=chatbot
-AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=always
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
+RestartSec=15
+ExecStartPre=-/usr/bin/docker rm -f chatbot
+ExecStartPre=/bin/sh -c 'aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${registry}'
+ExecStartPre=/usr/bin/docker pull ${image}
+ExecStart=/usr/bin/docker run --rm --name chatbot -p 80:3000 -v /var/lib/chatbot:/data --env-file /etc/chatbot.env ${image}
+ExecStop=/usr/bin/docker stop chatbot
 
 [Install]
 WantedBy=multi-user.target

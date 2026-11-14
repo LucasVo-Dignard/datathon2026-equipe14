@@ -140,36 +140,25 @@ resource "local_sensitive_file" "private_key" {
 # EC2 instance + Elastic IP
 # ---------------------------------------------------------------------------
 
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 locals {
-  app_dir = "${path.module}/../app"
+  # The app runs as a container pulled from ECR (see ecr.tf); user_data only
+  # installs Docker and the systemd unit, so its size no longer depends on the app.
+  #
+  # The registry address is built from the account and region (not from the
+  # repository's attributes) so it is known at plan time: otherwise Terraform
+  # can't see that user_data changes, and would update it in place instead of
+  # replacing the instance (and user_data only runs on first boot).
+  ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com"
+  app_image    = "${local.ecr_registry}/${var.project_name}-app:${var.app_image_tag}"
 
-  app_files = [
-    for f in sort(fileset(local.app_dir, "**")) : {
-      path = f
-      # Light minification to save user_data space: drop indentation, and
-      # comment-only lines in JS/CSS. The files in Git keep their comments.
-      content = trimsuffix(
-        replace(
-          replace(
-            replace(file("${local.app_dir}/${f}"), "/(?m)^[ \\t]+/", ""),
-            "/(?m)^//.*\\n/", ""
-          ),
-          "/(?m)^/\\*.*\\*/\\n/", ""
-        ),
-        "\n"
-      )
-    } if !startswith(f, "data/") && !startswith(f, "node_modules/") && !endswith(f, ".md")
-  ]
-
-  # Heredoc delimiter for the embedded files; must not appear in any of them.
-  app_eof = "CHATBOT_FILE_EOF_7f3a"
-
-  # The app is embedded in user_data, and the whole script is gzipped so it
-  # stays under the 16 KB EC2 limit (cloud-init decompresses gzip natively).
-  user_data_gzip_b64 = base64gzip(templatefile("${path.module}/user_data.sh.tftpl", {
-    files = local.app_files
-    eof   = local.app_eof
-  }))
+  user_data = templatefile("${path.module}/user_data.sh.tftpl", {
+    region   = data.aws_region.current.name
+    registry = local.ecr_registry
+    image    = local.app_image
+  })
 }
 
 resource "aws_instance" "web" {
@@ -180,8 +169,9 @@ resource "aws_instance" "web" {
   key_name               = aws_key_pair.main.key_name
   iam_instance_profile   = aws_iam_instance_profile.web.name
 
-  # Any change in ../app recreates the instance (new public IP, chat data reset).
-  user_data_base64            = local.user_data_gzip_b64
+  # Changing user_data (or app_image_tag) recreates the instance. Changing the
+  # app does not: scripts/deploy-app.sh pushes a new image and restarts it.
+  user_data                   = local.user_data
   user_data_replace_on_change = true
 
   metadata_options {
@@ -195,18 +185,6 @@ resource "aws_instance" "web" {
   }
 
   tags = { Name = "${var.project_name}-web" }
-
-  lifecycle {
-    precondition {
-      # 16 KB of decoded (gzipped) data = 21848 base64 characters.
-      condition     = length(local.user_data_gzip_b64) <= 21848
-      error_message = "Gzipped user_data exceeds the 16 KB EC2 limit: the app in ../app is too big to embed."
-    }
-    precondition {
-      condition     = alltrue([for f in local.app_files : !strcontains(f.content, local.app_eof)])
-      error_message = "An app file contains the heredoc delimiter used to embed it in user_data."
-    }
-  }
 
   depends_on = [aws_internet_gateway.main]
 }
