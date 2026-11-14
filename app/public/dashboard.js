@@ -85,6 +85,43 @@
   }
 
   // -------------------------------------------------------------------------
+  // News (filterable by sector)
+  // -------------------------------------------------------------------------
+
+  const relTime = new Intl.RelativeTimeFormat('fr-CA', { numeric: 'auto' });
+  const news = { items: [], names: {}, sector: null };
+
+  function ago(iso) {
+    const h = Math.round((Date.now() - Date.parse(iso)) / 3600e3);
+    return h < 24 ? relTime.format(-Math.max(h, 1), 'hour') : relTime.format(-Math.round(h / 24), 'day');
+  }
+
+  function renderNews() {
+    const sectors = [...new Set(news.items.map((n) => n.sector))];
+    const filter = $('news-filter');
+    filter.replaceChildren(...[null, ...sectors].map((sec) => {
+      const b = el('button', { 'aria-pressed': String(sec === news.sector) }, sec ?? 'Tout');
+      b.onclick = () => { news.sector = sec; renderNews(); };
+      return b;
+    }));
+
+    const items = news.items.filter((n) => !news.sector || n.sector === news.sector);
+    $('news').replaceChildren(...items.map((n) => {
+      const li = el('li', { class: 'news-item' });
+      const tags = el('div', { class: 'tags' });
+      tags.append(el('span', { class: 'tag sector' }, n.sector));
+      for (const sym of n.symbols) tags.append(el('span', { class: 'tag', title: news.names[sym] || sym }, sym));
+      li.append(
+        tags,
+        el('h3', {}, n.title),
+        el('p', {}, n.summary),
+        el('span', { class: 'meta' }, `${n.source} · ${ago(n.publishedAt)}`),
+      );
+      return li;
+    }));
+  }
+
+  // -------------------------------------------------------------------------
   // Performance chart (single series: no legend, the card title names it)
   // -------------------------------------------------------------------------
 
@@ -294,6 +331,9 @@
       const data = await res.json();
       renderSummary(data);
       renderHoldings(data);
+      news.items = data.news || [];
+      news.names = Object.fromEntries(data.holdings.map((h) => [h.symbol, h.name]));
+      renderNews();
       chart.history = data.history;
       renderChart();
     } catch (err) {
