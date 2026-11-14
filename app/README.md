@@ -65,3 +65,14 @@ All thresholds are prototype assumptions, for simulation only, not financial adv
 
 Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**
 database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`.
+
+## Price alerts by email
+
+`notifications.js` (API `/api/notifications`, card on the profile page) and the
+daily job `src/marketdata/jobs/price_alerts.py` email users when a holding moves
+by their threshold or more in one trading day. The threshold follows the risk
+level (2 % Faible … 7 % Élevé, 4 % without a profile). Sent with Amazon SES
+(see `infra/README.md`); tables `notification_subscriptions` and
+`price_alerts_sent` (migrations V5, V6). Needs Postgres and `ALERTS_SENDER`,
+otherwise the card says alerts are unavailable.
+

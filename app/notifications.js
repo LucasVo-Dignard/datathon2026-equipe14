@@ -1,22 +1,28 @@
 'use strict';
 // ---------------------------------------------------------------------------
-// Alertes de prix par courriel (Amazon SNS).
+// Alertes de prix par courriel (Amazon SES).
 //
-// Un seul topic SNS par environnement (infra/sns.tf). Chaque abonnement
-// courriel porte un filtre { username: [<utilisateur>] } : un message publié
-// avec l'attribut username n'arrive qu'à cette personne.
-//
-//   - l'app abonne / désabonne et envoie le courriel de test (ce fichier) ;
+//   - l'app enregistre l'abonnement, fait vérifier l'adresse si besoin et
+//     envoie le courriel de test (ce fichier) ;
 //   - le job quotidien (src/marketdata/jobs/price_alerts.py) envoie les vraies
-//     alertes, à partir de la table notification_subscriptions (V5).
+//     alertes, à partir de la table notification_subscriptions (V5, V6).
 //
-// Nécessite Postgres (DATABASE_URL) et NOTIFICATIONS_TOPIC_ARN ; sinon la
-// fonctionnalité est simplement désactivée (enabled = false).
+// Bac à sable SES : tant que le compte n'a pas l'accès « production », SES
+// n'envoie qu'à des adresses vérifiées. À l'abonnement, on crée donc l'identité
+// de l'adresse : SES envoie « Please verify your email address », et l'abonné
+// est actif dès qu'il a cliqué. Une fois le compte en production, l'adresse est
+// active tout de suite, sans clic.
+//
+// Chaque courriel contient un lien de désabonnement en un clic, sans connexion
+// (GET /desabonnement?u=<username>&t=<token>).
+//
+// Nécessite Postgres (DATABASE_URL) et ALERTS_SENDER (adresse expéditrice
+// vérifiée dans SES) ; sinon la fonctionnalité est désactivée (enabled = false).
 // ---------------------------------------------------------------------------
 
 const {
-  SNSClient, SubscribeCommand, UnsubscribeCommand, PublishCommand, GetSubscriptionAttributesCommand,
-} = require('@aws-sdk/client-sns');
+  SESv2Client, SendEmailCommand, GetAccountCommand, CreateEmailIdentityCommand, GetEmailIdentityCommand,
+} = require('@aws-sdk/client-sesv2');
 
 // Seuil de variation journalière (%) selon le niveau de risque du profil :
 // un profil prudent est averti plus tôt. Hypothèses du prototype.
@@ -24,6 +30,8 @@ const THRESHOLDS = { faible: 2, 'faible-modere': 3, modere: 4, 'modere-eleve': 5
 const DEFAULT_THRESHOLD = 4; // sans profil
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/;
 const MAX_EMAIL = 254;
+const TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ACCOUNT_CACHE_MS = 10 * 60 * 1000;
 
 class NotificationError extends Error {
   constructor(status, message) {
@@ -34,14 +42,6 @@ class NotificationError extends Error {
 
 const thresholdFor = (profileResult) => THRESHOLDS[profileResult?.level?.id] ?? DEFAULT_THRESHOLD;
 
-// SNS exige un objet ASCII de moins de 100 caractères (sans accents).
-function asciiSubject(text) {
-  return text
-    .replace(/[\u2212\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u00ab\u00bb\u201c\u201d]/g, '"')
-    .replace(/[\u00a0\u202f]/g, ' ')
-    .normalize('NFD').replace(/\p{M}/gu, '').replace(/[^\x20-\x7E]/g, '').slice(0, 99);
-}
-
 function normalizeEmail(value) {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!email || email.length > MAX_EMAIL || !EMAIL_RE.test(email)) {
@@ -50,42 +50,89 @@ function normalizeEmail(value) {
   return email;
 }
 
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[c]));
+
+function unsubscribeUrl(appUrl, username, token) {
+  return `${appUrl}/desabonnement?u=${encodeURIComponent(username)}&t=${token}`;
+}
+
+// Courriel texte + HTML. paragraphs : liste de chaînes (un paragraphe chacune).
+function emailContent({ subject, paragraphs, appUrl, unsubscribe }) {
+  const footer = 'Simulation éducative (prototype du Datathon 2026) : ce message n’est pas un conseil financier personnalisé.';
+  const text = [
+    ...paragraphs.flatMap((p) => [p, '']),
+    appUrl ? `Voir votre portefeuille : ${appUrl}` : null,
+    '',
+    '—',
+    footer,
+    `Ne plus recevoir ces alertes : ${unsubscribe}`,
+  ].filter((l) => l !== null).join('\n');
+  const html = `<!doctype html><html lang="fr"><body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#0b0b0b;line-height:1.5;max-width:600px">
+${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n')}
+${appUrl ? `<p><a href="${escapeHtml(appUrl)}">Voir votre portefeuille</a></p>` : ''}
+<hr style="border:0;border-top:1px solid #e1e0d9">
+<p style="font-size:12px;color:#52514e">${escapeHtml(footer)}<br>
+<a href="${escapeHtml(unsubscribe)}" style="color:#52514e">Ne plus recevoir ces alertes</a></p>
+</body></html>`;
+  return { subject, text, html };
+}
+
 const errName = (err) => err?.name || err?.Code || '';
 
 function createNotifications({
-  pool, sns, topicArn, appUrl = '',
+  pool, ses, sender, configurationSet, appUrl = '', now = Date.now,
 } = {}) {
-  const enabled = Boolean(pool && sns && topicArn);
+  const enabled = Boolean(pool && ses && sender);
+  let account = null; // { production, at }
 
   function requireEnabled() {
     if (!enabled) {
-      throw new NotificationError(503, 'Alertes indisponibles dans cet environnement (base de données ou SNS non configurés)');
+      throw new NotificationError(503, 'Alertes indisponibles dans cet environnement (base de données ou SES non configurés)');
+    }
+  }
+
+  // Le compte SES est-il sorti du bac à sable ? (mis en cache 10 min)
+  async function production() {
+    if (!account || now() - account.at > ACCOUNT_CACHE_MS) {
+      const res = await ses.send(new GetAccountCommand({}));
+      account = { production: Boolean(res.ProductionAccessEnabled), at: now() };
+    }
+    return account.production;
+  }
+
+  // 'active' si SES peut écrire à cette adresse, sinon 'pending' (vérification
+  // pas encore cliquée, ou identité absente).
+  async function deliverability(email) {
+    if (await production()) return 'active';
+    try {
+      const res = await ses.send(new GetEmailIdentityCommand({ EmailIdentity: email }));
+      return res.VerifiedForSendingStatus ? 'active' : 'pending';
+    } catch (err) {
+      if (errName(err) === 'NotFoundException') return 'pending';
+      throw err;
+    }
+  }
+
+  // Bac à sable : crée l'identité, ce qui envoie le courriel de vérification
+  // d'AWS. Rien à faire en production ou si l'adresse est déjà vérifiée.
+  async function requestVerification(email) {
+    if (await production()) return;
+    try {
+      await ses.send(new CreateEmailIdentityCommand({ EmailIdentity: email }));
+    } catch (err) {
+      if (errName(err) !== 'AlreadyExistsException') throw err;
     }
   }
 
   async function row(username) {
     const { rows } = await pool.query(
-      'SELECT email, subscription_arn, threshold_pct, symbols FROM notification_subscriptions WHERE username = $1',
+      `SELECT email, threshold_pct, symbols, unsubscribe_token
+         FROM notification_subscriptions WHERE username = $1`,
       [username],
     );
     return rows[0] || null;
-  }
-
-  // 'pending' (lien de confirmation pas encore cliqué), 'confirmed', ou null si
-  // l'abonnement n'existe plus (désabonné par le lien du courriel, ou demande
-  // non confirmée expirée après 3 jours).
-  async function snsStatus(subscriptionArn) {
-    try {
-      const { Attributes: a = {} } = await sns.send(new GetSubscriptionAttributesCommand({ SubscriptionArn: subscriptionArn }));
-      return a.PendingConfirmation === 'true' ? 'pending' : 'confirmed';
-    } catch (err) {
-      if (['NotFoundException', 'NotFound', 'InvalidParameterException', 'InvalidParameter'].includes(errName(err))) return null;
-      throw err;
-    }
-  }
-
-  async function forget(username) {
-    await pool.query('DELETE FROM notification_subscriptions WHERE username = $1', [username]);
   }
 
   // profile : pour afficher le seuil qui s'appliquerait avant l'abonnement.
@@ -94,53 +141,32 @@ function createNotifications({
     if (!enabled) return none;
     const r = await row(username);
     if (!r) return none;
-    const status = await snsStatus(r.subscription_arn);
-    if (!status) {
-      await forget(username);
-      return none;
-    }
     return {
-      enabled: true, status, email: r.email, thresholdPct: Number(r.threshold_pct), symbols: r.symbols,
+      enabled: true,
+      status: await deliverability(r.email),
+      email: r.email,
+      thresholdPct: Number(r.threshold_pct),
+      symbols: r.symbols,
+      sandbox: !(await production()),
     };
   }
 
   async function subscribe(username, rawEmail, { profile, symbols }) {
     requireEnabled();
     const email = normalizeEmail(rawEmail);
-    const threshold = thresholdFor(profile);
     const tickers = [...new Set(symbols)].filter(Boolean);
     const current = await row(username);
-
-    let subscriptionArn = current?.subscription_arn;
-    if (!current || current.email !== email || !(await snsStatus(current.subscription_arn))) {
-      if (current) await sns.send(new UnsubscribeCommand({ SubscriptionArn: current.subscription_arn })).catch(() => {});
-      try {
-        ({ SubscriptionArn: subscriptionArn } = await sns.send(new SubscribeCommand({
-          TopicArn: topicArn,
-          Protocol: 'email',
-          Endpoint: email,
-          ReturnSubscriptionArn: true,
-          Attributes: {
-            FilterPolicyScope: 'MessageAttributes',
-            FilterPolicy: JSON.stringify({ username: [username] }),
-          },
-        })));
-      } catch (err) {
-        // Même courriel déjà abonné avec le filtre d'un autre utilisateur.
-        if (/already exists with different attributes/i.test(err?.message || '')) {
-          throw new NotificationError(409, 'Ce courriel est déjà utilisé pour les alertes d’un autre utilisateur');
-        }
-        throw err;
-      }
-    }
-
     await pool.query(
-      `INSERT INTO notification_subscriptions (username, email, subscription_arn, threshold_pct, symbols)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO notification_subscriptions (username, email, threshold_pct, symbols)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (username) DO UPDATE
-         SET email = EXCLUDED.email, subscription_arn = EXCLUDED.subscription_arn,
-             threshold_pct = EXCLUDED.threshold_pct, symbols = EXCLUDED.symbols, updated_at = now()`,
-      [username, email, subscriptionArn, threshold, tickers],
+         SET email = EXCLUDED.email, threshold_pct = EXCLUDED.threshold_pct, symbols = EXCLUDED.symbols,
+             -- nouvelle adresse : nouveau lien de désabonnement
+             unsubscribe_token = CASE WHEN notification_subscriptions.email = EXCLUDED.email
+                                      THEN notification_subscriptions.unsubscribe_token
+                                      ELSE gen_random_uuid() END,
+             updated_at = now()`,
+      [username, email, thresholdFor(profile), tickers],
     );
     // Le job quotidien ne met à jour que les titres suivis : on y ajoute ceux du portefeuille.
     if (tickers.length) {
@@ -149,18 +175,27 @@ function createNotifications({
         [tickers],
       );
     }
+    if (!current || current.email !== email || (await deliverability(email)) === 'pending') {
+      await requestVerification(email);
+    }
     return get(username, { profile });
   }
 
+  // Les identités SES vérifiées ne sont pas supprimées : elles sont partagées
+  // entre environnements (même compte AWS). Sans abonnement, rien n'est envoyé.
   async function unsubscribe(username) {
     requireEnabled();
-    const r = await row(username);
-    if (!r) return get(username);
-    // Une demande pas encore confirmée ne peut pas être annulée par l'API :
-    // elle expire seule après 3 jours, et le job ne lui écrit plus.
-    await sns.send(new UnsubscribeCommand({ SubscriptionArn: r.subscription_arn })).catch(() => {});
-    await forget(username);
-    return get(username);
+    await pool.query('DELETE FROM notification_subscriptions WHERE username = $1', [username]);
+  }
+
+  // Lien du courriel : pas de session, le jeton fait foi.
+  async function unsubscribeWithToken(username, token) {
+    if (!enabled || typeof username !== 'string' || !TOKEN_RE.test(String(token))) return false;
+    const { rowCount } = await pool.query(
+      'DELETE FROM notification_subscriptions WHERE username = $1 AND unsubscribe_token = $2',
+      [username, token],
+    );
+    return rowCount > 0;
   }
 
   // Le seuil suit le niveau de risque : à recalculer quand le profil change.
@@ -174,53 +209,61 @@ function createNotifications({
 
   async function sendTest(username, { profile }) {
     requireEnabled();
-    const state = await get(username);
-    if (state.status === 'none') throw new NotificationError(409, 'Abonnez-vous d’abord aux alertes');
-    if (state.status === 'pending') {
-      throw new NotificationError(409, 'Confirmez d’abord votre abonnement avec le lien reçu par courriel');
+    const r = await row(username);
+    if (!r) throw new NotificationError(409, 'Abonnez-vous d’abord aux alertes');
+    if ((await deliverability(r.email)) === 'pending') {
+      throw new NotificationError(409, 'Vérifiez d’abord votre adresse avec le lien reçu par courriel');
     }
+    const threshold = Number(r.threshold_pct);
     const level = profile?.level?.label;
-    const message = [
-      'Bonjour,',
-      '',
-      'Ceci est une notification de test : vos alertes de prix fonctionnent.',
-      '',
-      `Vous serez averti par courriel quand un titre de votre portefeuille varie de ${state.thresholdPct} % ou plus `
-        + 'en une journée de bourse, après la mise à jour quotidienne des données (en semaine, en soirée).',
-      level ? `Ce seuil découle de votre profil investisseur (niveau de risque : ${level}).` : 'Seuil par défaut (profil investisseur non rempli).',
-      '',
-      `Titres suivis : ${state.symbols.join(', ') || 'aucun'}.`,
-      appUrl ? `\nVoir votre portefeuille : ${appUrl}` : '',
-      '',
-      '—',
-      'Simulation éducative (prototype du Datathon 2026) : ceci n’est pas un conseil financier personnalisé.',
-    ].join('\n');
-
-    const { MessageId } = await sns.send(new PublishCommand({
-      TopicArn: topicArn,
-      Subject: asciiSubject('Test - vos alertes de prix sont actives'),
-      Message: message,
-      MessageAttributes: { username: { DataType: 'String', StringValue: username } },
+    const unsubscribe = unsubscribeUrl(appUrl, username, r.unsubscribe_token);
+    const content = emailContent({
+      subject: 'Test : vos alertes de prix sont actives',
+      appUrl,
+      unsubscribe,
+      paragraphs: [
+        'Bonjour,',
+        'Ceci est une notification de test : vos alertes de prix fonctionnent.',
+        `Vous serez averti par courriel quand un titre de votre portefeuille varie de ${threshold} % ou plus `
+          + 'en une journée de bourse, après la mise à jour quotidienne des données (en semaine, en soirée).',
+        level ? `Ce seuil découle de votre profil investisseur (niveau de risque : ${level}).`
+          : 'Seuil par défaut : votre profil investisseur n’est pas rempli.',
+        `Titres suivis : ${r.symbols.join(', ') || 'aucun'}.`,
+      ],
+    });
+    const { MessageId } = await ses.send(new SendEmailCommand({
+      FromEmailAddress: sender,
+      Destination: { ToAddresses: [r.email] },
+      ConfigurationSetName: configurationSet || undefined,
+      Content: {
+        Simple: {
+          Subject: { Data: content.subject, Charset: 'UTF-8' },
+          Body: { Text: { Data: content.text, Charset: 'UTF-8' }, Html: { Data: content.html, Charset: 'UTF-8' } },
+          Headers: [{ Name: 'List-Unsubscribe', Value: `<${unsubscribe}>` }],
+        },
+      },
     }));
-    return { sent: true, messageId: MessageId, email: state.email };
+    return { sent: true, messageId: MessageId, email: r.email };
   }
 
   return {
-    enabled, get, subscribe, unsubscribe, sendTest, updateThreshold,
+    enabled, get, subscribe, unsubscribe, unsubscribeWithToken, sendTest, updateThreshold,
   };
 }
 
 // Configuration depuis l'environnement du conteneur (voir infra/user_data.sh.tftpl).
 function createNotificationsFromEnv({ pool, env = process.env } = {}) {
-  const topicArn = env.NOTIFICATIONS_TOPIC_ARN;
-  if (!pool || !topicArn) return createNotifications({});
-  const region = topicArn.split(':')[3] || env.AWS_REGION;
+  if (!pool || !env.ALERTS_SENDER) return createNotifications({});
   return createNotifications({
-    pool, sns: new SNSClient({ region }), topicArn, appUrl: env.APP_URL || '',
+    pool,
+    ses: new SESv2Client({ region: env.AWS_REGION }),
+    sender: env.ALERTS_SENDER,
+    configurationSet: env.SES_CONFIGURATION_SET,
+    appUrl: env.APP_URL || '',
   });
 }
 
 module.exports = {
-  createNotifications, createNotificationsFromEnv, thresholdFor, asciiSubject, normalizeEmail,
+  createNotifications, createNotificationsFromEnv, thresholdFor, normalizeEmail, emailContent, escapeHtml,
   NotificationError, THRESHOLDS,
 };

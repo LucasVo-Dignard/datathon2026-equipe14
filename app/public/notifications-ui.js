@@ -54,35 +54,38 @@
 
       if (!s.enabled) {
         root.replaceChildren(intro, h('p', { class: 'muted small' },
-          'Les alertes ne sont pas disponibles dans cet environnement (base de données ou SNS non configurés).'));
+          'Les alertes ne sont pas disponibles dans cet environnement (base de données ou SES non configurés).'));
         return;
       }
 
       if (s.status === 'none') {
         const input = h('input', { type: 'email', class: 'amount', placeholder: 'vous@exemple.com', autocomplete: 'email', maxlength: 254 });
         const btn = h('button', { class: 'primary' }, 'M’abonner');
-        const subscribe = () => run(btn, () => api('PUT', '/api/notifications', { email: input.value }),
-          'Lien de confirmation envoyé : ouvrez le courriel d’AWS Notifications et cliquez sur « Confirm subscription ».');
+        const subscribe = () => run(btn, () => api('PUT', '/api/notifications', { email: input.value }), null);
         btn.onclick = subscribe;
         input.onkeydown = (e) => { if (e.key === 'Enter') subscribe(); };
         root.replaceChildren(intro, h('div', { class: 'notif-form' }, input, btn), msg,
-          h('p', { class: 'muted small' }, 'Envoi par Amazon SNS. Vous pourrez vous désabonner à tout moment, ici ou depuis le courriel.'));
+          h('p', { class: 'muted small' }, 'Envoi par Amazon SES. Chaque courriel contient un lien pour vous désabonner en un clic.'));
         return;
       }
 
-      const unsub = h('button', { class: 'secondary' }, s.status === 'pending' ? 'Annuler' : 'Me désabonner');
+      const unsub = h('button', { class: 'secondary' }, 'Me désabonner');
       unsub.onclick = () => run(unsub, () => api('DELETE', '/api/notifications'), 'Abonnement supprimé.');
 
       if (s.status === 'pending') {
-        const check = h('button', { class: 'primary' }, 'J’ai confirmé');
+        // Bac à sable SES : l'adresse doit être vérifiée une fois.
+        const check = h('button', { class: 'primary' }, 'J’ai cliqué sur le lien');
         check.onclick = () => run(check, async () => {
           const st = await api('GET', '/api/notifications');
-          if (st.status === 'pending') throw new Error('Pas encore confirmé : cliquez sur le lien du courriel d’AWS Notifications (vérifiez les indésirables).');
+          if (st.status === 'pending') {
+            throw new Error('Adresse pas encore vérifiée : cliquez sur le lien du courriel « Amazon Web Services – Email Address Verification Request » (vérifiez les indésirables).');
+          }
           return st;
-        }, 'Abonnement confirmé : les alertes sont actives.');
+        }, 'Adresse vérifiée : les alertes sont actives.');
         root.replaceChildren(intro,
-          h('p', { class: 'notif-status pending' }, `En attente de confirmation pour ${s.email}. `
-            + 'Cliquez sur le lien « Confirm subscription » du courriel envoyé par AWS Notifications.'),
+          h('p', { class: 'notif-status pending' }, `Vérification de ${s.email} en attente. Pendant la phase de test, `
+            + 'AWS doit vérifier l’adresse une seule fois : cliquez sur le lien du courriel « Email Address Verification Request » '
+            + 'envoyé par Amazon Web Services.'),
           h('div', { class: 'notif-form' }, check, unsub), msg);
         return;
       }

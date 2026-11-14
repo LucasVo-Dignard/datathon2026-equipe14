@@ -13,7 +13,7 @@ network down), so AWS Batch retries the job only in that case.
 
 Finnhub steps run only if ``FINNHUB_API_KEY`` is set.
 
-When ``NOTIFICATIONS_TOPIC_ARN`` is set, price-move alerts are sent by email
+When ``ALERTS_SENDER`` is set, price-move alerts are sent by email (SES)
 after the refresh (``price_alerts.py``). An alert failure is logged but does
 not fail the job: the data refresh already succeeded.
 
@@ -158,13 +158,13 @@ def refresh_enabled(env: Mapping[str, str] | None = None) -> bool:
 
 def send_price_alerts(conn: psycopg.Connection, env: Mapping[str, str] | None = None) -> None:
     env = os.environ if env is None else env
-    topic_arn = env.get(price_alerts.TOPIC_ENV_VAR)
-    if not topic_arn:
-        log.info("%s not set: no price alerts", price_alerts.TOPIC_ENV_VAR)
+    sender = env.get(price_alerts.SENDER_ENV_VAR)
+    if not sender:
+        log.info("%s not set: no price alerts", price_alerts.SENDER_ENV_VAR)
         return
     try:
-        alerts = price_alerts.run(conn, price_alerts.sns_client(topic_arn), topic_arn,
-                                  date.today(), env.get("APP_URL", ""))
+        alerts = price_alerts.run(conn, price_alerts.ses_client(), sender, date.today(),
+                                  env.get("APP_URL", ""), env.get("SES_CONFIGURATION_SET", ""))
         log.info("price alerts: %d user(s) notified, %d failure(s)",
                  alerts.users_notified, len(alerts.failed_users))
     except Exception as exc:  # alerts are best effort; the refresh already succeeded

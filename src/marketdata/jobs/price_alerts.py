@@ -1,34 +1,40 @@
-"""Price-move alerts by email, through Amazon SNS.
+"""Price-move alerts by email, through Amazon SES.
 
 Runs at the end of the daily refresh (``daily_refresh.py``) when
-``NOTIFICATIONS_TOPIC_ARN`` is set, or on its own::
+``ALERTS_SENDER`` is set, or on its own::
 
     DATABASE_URL=postgresql://bncd_admin:localdev@127.0.0.1:5432/marketdata \\
-    NOTIFICATIONS_TOPIC_ARN=arn:aws:sns:... python -m marketdata.jobs.price_alerts [--dry-run]
+    ALERTS_SENDER=alertes@example.com python -m marketdata.jobs.price_alerts [--dry-run]
 
 For every subscription (table ``notification_subscriptions``, written by the
 web app), it compares the two latest daily closes of each of the user's
 symbols. A move of ``threshold_pct`` or more (the threshold follows the
 user's risk level) becomes an alert. Each user gets at most one email per run,
-listing all their moves, published with the ``username`` message attribute:
-the SNS subscription's filter policy delivers it to that user only.
+listing all their moves, sent with SES to the subscription's address. Every
+email has a one-click unsubscribe link (``/desabonnement`` in the web app).
 
 ``price_alerts_sent`` records what was sent, so a rerun or an AWS Batch retry
-never sends the same move twice. A failed publish records nothing, so it is
-retried on the next run.
+never sends the same move twice. A failed send records nothing, so it is
+retried on the next run. While the SES account is in the sandbox, an address
+that has not been verified yet is rejected by SES and simply retried later.
+
+Environment: ``ALERTS_SENDER`` (verified SES identity), optional
+``SES_CONFIGURATION_SET`` and ``APP_URL`` (links in the email).
 """
 
 from __future__ import annotations
 
 import argparse
+import html
 import logging
 import os
 import sys
-import unicodedata
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
+from urllib.parse import quote
 
 import psycopg
 
@@ -36,7 +42,7 @@ from marketdata.db import connect
 
 log = logging.getLogger("marketdata.price_alerts")
 
-TOPIC_ENV_VAR = "NOTIFICATIONS_TOPIC_ARN"
+SENDER_ENV_VAR = "ALERTS_SENDER"
 PROVIDER = "yahoo"
 # Ignore bars older than this (weekend + a holiday): no alert on stale data.
 MAX_BAR_AGE_DAYS = 4
@@ -61,7 +67,9 @@ class PriceMove:
 @dataclass
 class UserAlert:
     username: str
+    email: str
     threshold_pct: float
+    unsubscribe_token: uuid.UUID | str
     moves: list[PriceMove] = field(default_factory=list)
 
 
@@ -82,7 +90,8 @@ bars AS (
        AND b.date > %(today)s::date - 30
     WINDOW w AS (PARTITION BY b.symbol ORDER BY b.date)
 )
-SELECT n.username, n.threshold_pct, b.symbol, b.date, b.adj_close, b.prev_date, b.prev_close
+SELECT n.username, n.email, n.threshold_pct, n.unsubscribe_token,
+       b.symbol, b.date, b.adj_close, b.prev_date, b.prev_close
   FROM notification_subscriptions n
   CROSS JOIN LATERAL unnest(n.symbols) AS sym(symbol)
   JOIN bars b ON b.symbol = sym.symbol AND b.rn = 1
@@ -101,8 +110,8 @@ def find_alerts(conn: psycopg.Connection, today: date) -> list[UserAlert]:
         FIND_ALERTS_SQL, {"provider": PROVIDER, "today": today, "max_age": MAX_BAR_AGE_DAYS}
     ).fetchall()
     alerts: dict[str, UserAlert] = {}
-    for username, threshold, symbol, day, close, prev_day, prev_close in rows:
-        alert = alerts.setdefault(username, UserAlert(username, float(threshold)))
+    for username, email, threshold, token, symbol, day, close, prev_day, prev_close in rows:
+        alert = alerts.setdefault(username, UserAlert(username, email, float(threshold), token))
         alert.moves.append(PriceMove(symbol, day, float(close), prev_day, float(prev_close)))
     return list(alerts.values())
 
@@ -110,16 +119,8 @@ def find_alerts(conn: psycopg.Connection, today: date) -> list[UserAlert]:
 # --- Message ------------------------------------------------------------------
 
 
-def ascii_subject(text: str) -> str:
-    """SNS email subjects must be ASCII, under 100 characters."""
-    for src, dst in (("\u2212", "-"), ("\u2013", "-"), ("\u2019", "'"), ("\u00a0", " "), ("\u202f", " ")):
-        text = text.replace(src, dst)
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return text[:99]
-
-
 def fr_number(value: float, decimals: int = 2) -> str:
-    return f"{value:,.{decimals}f}".replace(",", " ").replace(".", ",")
+    return f"{value:,.{decimals}f}".replace(",", " ").replace(".", ",")
 
 
 def fr_pct(value: float) -> str:
@@ -131,7 +132,23 @@ def fr_date(d: date) -> str:
     return f"{d.day} {MONTHS[d.month - 1]} {d.year}"
 
 
-def compose(alert: UserAlert, app_url: str = "") -> tuple[str, str]:
+def unsubscribe_url(app_url: str, username: str, token: uuid.UUID | str) -> str:
+    return f"{app_url}/desabonnement?u={quote(username, safe='')}&t={token}"
+
+
+@dataclass(frozen=True)
+class Email:
+    subject: str
+    text: str
+    html: str
+    unsubscribe_url: str
+
+
+FOOTER = ("Simulation éducative (prototype du Datathon 2026) : ce message n'est pas un "
+          "conseil financier personnalisé.")
+
+
+def compose(alert: UserAlert, app_url: str = "") -> Email:
     moves = alert.moves
     if len(moves) == 1:
         m = moves[0]
@@ -141,40 +158,57 @@ def compose(alert: UserAlert, app_url: str = "") -> tuple[str, str]:
         subject = f"Alerte de prix : {len(moves)} titres ont fortement varié"
         intro = "Plusieurs titres de votre portefeuille ont fortement varié lors de la dernière séance :"
 
-    lines = [
-        f"  {'▲' if m.change_pct > 0 else '▼'} {m.symbol:<9} {fr_pct(m.change_pct):>9}"
-        f"   ({fr_number(m.prev_close)} → {fr_number(m.close)}, du {fr_date(m.prev_date)} au {fr_date(m.date)})"
-        for m in moves
-    ]
+    def detail(m: PriceMove) -> str:
+        return (f"{fr_number(m.prev_close)} → {fr_number(m.close)}, "
+                f"du {fr_date(m.prev_date)} au {fr_date(m.date)}")
+
     threshold = fr_number(alert.threshold_pct, 0 if alert.threshold_pct.is_integer() else 1)
-    body = [
-        "Bonjour,",
-        "",
-        intro,
-        "",
-        *lines,
-        "",
+    explanation = [
         f"Pourquoi ce courriel : vous êtes averti dès qu'un titre suivi varie de {threshold} % ou plus "
         "en une journée. Ce seuil découle de votre niveau de risque dans votre profil investisseur "
         "(plus le profil est prudent, plus l'alerte arrive tôt).",
-        "",
         "Source : cours de clôture ajustés (dividendes et fractionnements) de Yahoo Finance, "
         "mis à jour par le job quotidien de l'application.",
-        "",
         "À garder en tête : une variation d'une seule journée ne dit rien de la tendance à long terme, "
         "et vendre après une forte baisse fige souvent la perte. Comparez-la plutôt à votre horizon "
         "et à vos objectifs avant toute décision.",
     ]
-    if app_url:
-        body += ["", f"Voir votre portefeuille et demander une explication à l'assistant : {app_url}"]
-    body += [
+    unsubscribe = unsubscribe_url(app_url, alert.username, alert.unsubscribe_token)
+
+    text_lines = [
+        "Bonjour,", "", intro, "",
+        *(f"  {'▲' if m.change_pct > 0 else '▼'} {m.symbol:<9} {fr_pct(m.change_pct):>9}   ({detail(m)})"
+          for m in moves),
         "",
-        "—",
-        "Simulation éducative (prototype du Datathon 2026) : ce message n'est pas un conseil financier "
-        "personnalisé. Pour ne plus recevoir ces alertes : lien de désabonnement ci-dessous, ou page "
-        "« Mon profil » de l'application.",
     ]
-    return ascii_subject(subject), "\n".join(body)
+    for p in explanation:
+        text_lines += [p, ""]
+    if app_url:
+        text_lines += [f"Voir votre portefeuille et demander une explication à l'assistant : {app_url}", ""]
+    text_lines += ["—", FOOTER, f"Ne plus recevoir ces alertes : {unsubscribe}"]
+
+    e = html.escape
+    rows = "\n".join(
+        f'<tr><td style="padding:4px 12px 4px 0;font-weight:600">{e(m.symbol)}</td>'
+        f'<td style="padding:4px 12px 4px 0;font-weight:600;color:{"#006300" if m.change_pct > 0 else "#d03b3b"}">'
+        f'{"▲" if m.change_pct > 0 else "▼"} {e(fr_pct(m.change_pct))}</td>'
+        f'<td style="padding:4px 0;color:#52514e">{e(detail(m))}</td></tr>'
+        for m in moves
+    )
+    link = (f'<p><a href="{e(app_url)}">Voir votre portefeuille et demander une explication à '
+            f"l'assistant</a></p>" if app_url else "")
+    html_body = (
+        '<!doctype html><html lang="fr"><body style="font-family:system-ui,-apple-system,Segoe UI,'
+        'Roboto,sans-serif;color:#0b0b0b;line-height:1.5;max-width:600px">'
+        f"<p>Bonjour,</p><p>{e(intro)}</p><table>{rows}</table>"
+        + "".join(f"<p>{e(p)}</p>" for p in explanation)
+        + link
+        + '<hr style="border:0;border-top:1px solid #e1e0d9">'
+        f'<p style="font-size:12px;color:#52514e">{e(FOOTER)}<br>'
+        f'<a href="{e(unsubscribe)}" style="color:#52514e">Ne plus recevoir ces alertes</a></p>'
+        "</body></html>"
+    )
+    return Email(subject, "\n".join(text_lines), html_body, unsubscribe)
 
 
 # --- Sending ------------------------------------------------------------------
@@ -189,26 +223,34 @@ class AlertReport:
 
 def send_alerts(
     conn: psycopg.Connection,
-    sns: Any,
-    topic_arn: str,
+    ses: Any,
+    sender: str,
     alerts: Sequence[UserAlert],
     app_url: str = "",
+    configuration_set: str = "",
 ) -> AlertReport:
-    """Publish one email per user, then record the moves as sent. ``conn``
-    must be in autocommit mode (each user is its own transaction)."""
+    """Send one email per user with SES, then record the moves as sent.
+    ``conn`` must be in autocommit mode (each user is its own transaction)."""
     report = AlertReport()
     for alert in alerts:
-        subject, message = compose(alert, app_url)
+        email = compose(alert, app_url)
+        request: dict[str, Any] = {
+            "FromEmailAddress": sender,
+            "Destination": {"ToAddresses": [alert.email]},
+            "Content": {"Simple": {
+                "Subject": {"Data": email.subject, "Charset": "UTF-8"},
+                "Body": {"Text": {"Data": email.text, "Charset": "UTF-8"},
+                         "Html": {"Data": email.html, "Charset": "UTF-8"}},
+                "Headers": [{"Name": "List-Unsubscribe", "Value": f"<{email.unsubscribe_url}>"}],
+            }},
+        }
+        if configuration_set:
+            request["ConfigurationSetName"] = configuration_set
         try:
-            sns.publish(
-                TopicArn=topic_arn,
-                Subject=subject,
-                Message=message,
-                MessageAttributes={"username": {"DataType": "String", "StringValue": alert.username}},
-            )
-        except Exception as exc:  # one failure must not stop the others
+            ses.send_email(**request)
+        except Exception as exc:  # one failure (e.g. unverified address) must not stop the others
             report.failed_users.append(alert.username)
-            log.warning("publish to %s failed: %s", alert.username, exc)
+            log.warning("email to %s failed: %s", alert.username, exc)
             continue
         with conn.transaction():
             for m in alert.moves:
@@ -229,44 +271,46 @@ def send_alerts(
 
 def run(
     conn: psycopg.Connection,
-    sns: Any,
-    topic_arn: str,
+    ses: Any,
+    sender: str,
     today: date,
     app_url: str = "",
+    configuration_set: str = "",
     dry_run: bool = False,
 ) -> AlertReport:
     alerts = find_alerts(conn, today)
     log.info("%d user(s) with price moves to report", len(alerts))
     if dry_run:
         for alert in alerts:
-            subject, message = compose(alert, app_url)
-            log.info("[dry run] %s: %s\n%s", alert.username, subject, message)
+            email = compose(alert, app_url)
+            log.info("[dry run] %s: %s\n%s", alert.username, email.subject, email.text)
         return AlertReport()
-    return send_alerts(conn, sns, topic_arn, alerts, app_url)
+    return send_alerts(conn, ses, sender, alerts, app_url, configuration_set)
 
 
-def sns_client(topic_arn: str) -> Any:
+def ses_client() -> Any:
     import boto3
 
-    return boto3.client("sns", region_name=topic_arn.split(":")[3])
+    return boto3.client("sesv2")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Send price-move alerts by email (SNS).")
+    parser = argparse.ArgumentParser(description="Send price-move alerts by email (SES).")
     parser.add_argument("--dry-run", action="store_true", help="print the emails, send nothing")
     parser.add_argument("--today", type=date.fromisoformat, default=None, help="override today (YYYY-MM-DD)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    topic_arn = os.environ.get(TOPIC_ENV_VAR, "")
-    if not topic_arn and not args.dry_run:
-        log.error("%s is not set", TOPIC_ENV_VAR)
+    sender = os.environ.get(SENDER_ENV_VAR, "")
+    if not sender and not args.dry_run:
+        log.error("%s is not set", SENDER_ENV_VAR)
         return 1
     today = args.today or date.today()
     with connect() as conn:
         conn.autocommit = True
-        report = run(conn, None if args.dry_run else sns_client(topic_arn), topic_arn, today,
-                     os.environ.get("APP_URL", ""), dry_run=args.dry_run)
+        report = run(conn, None if args.dry_run else ses_client(), sender, today,
+                     os.environ.get("APP_URL", ""), os.environ.get("SES_CONFIGURATION_SET", ""),
+                     dry_run=args.dry_run)
     log.info("alerts: %d user(s), %d move(s), %d failure(s)",
              report.users_notified, report.moves_sent, len(report.failed_users))
     return 1 if report.failed_users and not report.users_notified else 0

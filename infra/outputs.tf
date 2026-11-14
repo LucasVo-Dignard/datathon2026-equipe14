@@ -33,7 +33,7 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
 }
 
-output "price_alerts_topic_arn" {
-  description = "SNS topic of the price-move email alerts (sns.tf)."
-  value       = aws_sns_topic.price_alerts.arn
+output "alerts_sender_email" {
+  description = "Sender of the price alerts (SES identity, see ses.tf), or null if alerts are disabled."
+  value       = var.alerts_sender_email
 }

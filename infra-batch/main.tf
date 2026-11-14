@@ -27,10 +27,11 @@ data "aws_db_instance" "main" {
   db_instance_identifier = "${local.prefix}-db"
 }
 
-# Price alerts: the topic and the web server's address come from ../infra
-# (looked up by name, like the database), so apply ../infra first.
-data "aws_sns_topic" "price_alerts" {
-  name = "${local.prefix}-price-alerts"
+# Price alerts (SES): the sender and the web server's address come from
+# ../infra (looked up by name, like the database), so apply ../infra first.
+# No sender parameter = alerts disabled in this environment.
+data "aws_ssm_parameters_by_path" "alerts" {
+  path = "/${local.prefix}/alerts"
 }
 
 data "aws_eip" "web" {
@@ -47,6 +48,12 @@ locals {
   db_port       = data.aws_db_instance.main.port
 
   schedule_enabled = var.schedule_enabled != null ? var.schedule_enabled : local.is_prod
+
+  alerts_sender = try(
+    data.aws_ssm_parameters_by_path.alerts.values[index(data.aws_ssm_parameters_by_path.alerts.names, "/${local.prefix}/alerts/sender")],
+    "",
+  )
+  alerts_configuration_set = "${local.prefix}-alerts" # created with the sender in ../infra/ses.tf
 }
 
 # ---------------------------------------------------------------------------

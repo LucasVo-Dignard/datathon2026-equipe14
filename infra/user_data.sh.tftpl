@@ -20,7 +20,8 @@ install -d -o 1000 -g 1000 -m 700 /var/lib/chatbot
 install -m 600 /dev/null /etc/chatbot.env
 cat > /etc/chatbot.env <<'ENV'
 AWS_REGION=${region}
-NOTIFICATIONS_TOPIC_ARN=${topic_arn}
+ALERTS_SENDER=${alerts_sender}
+SES_CONFIGURATION_SET=${configuration_set}
 APP_URL=${app_url}
 ENV
 
