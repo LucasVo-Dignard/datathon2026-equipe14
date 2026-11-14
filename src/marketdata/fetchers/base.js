@@ -11,7 +11,7 @@
 // The public `fetch` methods are template methods: they normalize the input,
 // then call `_fetch`, which subclasses implement.
 
-const { normalizeSymbol, DateRange } = require('../values');
+const { normalizeCode, normalizeSymbol, DateRange, YearRange } = require('../values');
 
 class Fetcher {
   static provider = null;
@@ -66,6 +66,18 @@ class NewsFetcher extends RangeFetcher {}
 /** Earnings releases (past and scheduled). */
 class EarningsFetcher extends RangeFetcher {}
 
+// Yearly macroeconomic indicator (GDP growth, inflation, ...) for one or more
+// countries over a YearRange. Resolves to an empty list when the provider has
+// nothing in the range.
+class MacroIndicatorFetcher extends Fetcher {
+  async fetch(indicator, countries, years) {
+    if (!(years instanceof YearRange)) throw new TypeError('years must be a YearRange');
+    const codes = [].concat(countries).map(normalizeCode);
+    if (!codes.length) throw new RangeError('countries must not be empty');
+    return this._fetch(normalizeCode(indicator), codes, years);
+  }
+}
+
 module.exports = {
   Fetcher,
   SymbolFetcher,
@@ -78,4 +90,5 @@ module.exports = {
   PriceHistoryFetcher,
   NewsFetcher,
   EarningsFetcher,
+  MacroIndicatorFetcher,
 };

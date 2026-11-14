@@ -177,7 +177,23 @@ h1, h2, h3 { margin: 0; }
 .top-tabs button:hover { background: var(--hover); }
 .top-tabs button[aria-pressed="true"] { background: var(--hover); color: var(--text); font-weight: 600; }
 .app[data-tab="profile"] .dashboard,
-.app:not([data-tab="profile"]) .profile { display: none; }
+.app[data-tab="macro"] .dashboard,
+.app:not([data-tab="profile"]) .profile,
+.app:not([data-tab="macro"]) .macro { display: none; }
+
+/* --------------------------------------------------------------- Macro */
+.macro { overflow-y: auto; min-width: 0; }
+.macro-body { padding: 20px; display: flex; flex-direction: column; gap: 4px; }
+.macro-body h1 { font-size: 1.4rem; }
+.macro-body > p { margin: 0; }
+.macro-list { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; }
+.macro .table td:first-child { white-space: nowrap; }
+.macro .table th:first-child, .macro .table td:first-child { position: sticky; left: 0; background: var(--surface); }
+.macro .table .missing { color: var(--muted); }
+.macro .table td a { color: inherit; text-decoration: underline; text-decoration-color: var(--border); }
+.macro .table td a:hover { text-decoration-color: currentColor; }
+.macro-sources { margin-top: 12px; }
+.macro-sources p { margin: 0; }
 
 /* ----------------------------------------------------- Investor profile */
 .badge {
@@ -324,9 +340,11 @@ h1, h2, h3 { margin: 0; }
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .app[data-tab="portfolio"] .assistant,
   .app[data-tab="profile"] .assistant,
+  .app[data-tab="macro"] .assistant,
   .app[data-tab="assistant"] .dashboard { display: none; }
   .top-tabs { display: none; }
   .profile-body { padding: 16px 12px 32px; }
+  .macro-body { padding: 12px; }
   .assistant { border-left: 0; }
 
   .tabbar {

@@ -59,6 +59,7 @@ function setTab(tab) {
     b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   }
   if (tab === 'portfolio') window.Dashboard.redraw();
+  else if (tab === 'macro') window.Macro.load();
   else scrollMessages();
 }
 

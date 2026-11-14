@@ -15,7 +15,8 @@ const repo = require('../src/marketdata/db/repositories');
 const { ConfigurationError } = require('../src/marketdata/errors');
 const { main, refreshEnabled } = require('../src/marketdata/jobs/daily-refresh');
 const models = require('../src/marketdata/models');
-const { refresh } = require('../src/marketdata/refresh');
+const { refresh, refreshMacro } = require('../src/marketdata/refresh');
+const { YearRange } = require('../src/marketdata/values');
 const { createStockLookup } = require('../app/stocks');
 
 const quiet = { info() {}, warn() {}, error() {} };
@@ -153,6 +154,48 @@ test('refresh isolates failures and records them', needsDb, () => withDb(async (
 test('refresh reports a total failure', needsDb, () => withDb(async (db) => {
   const boom = async () => { throw new Error('network down'); };
   assert.ok((await refresh(db, [SYMBOL], [['boom', boom]], { log: quiet })).nothingSucceeded);
+}));
+
+test('macro refresh upserts observations and isolates failures', needsDb, () => withDb(async (db) => {
+  // Fake provider name, so only test rows are touched.
+  const PROVIDER = 'zztest';
+  const macroCount = async () => Number((await db.query(
+    'SELECT count(*) FROM macro_observations WHERE provider = $1', [PROVIDER])).rows[0].count);
+  const obs = (year, value) => models.macroObservation({ country: 'CAN', indicator: 'FP.CPI.TOTL.ZG', year, value,
+    provider: PROVIDER, indicatorName: 'Inflation, consumer prices (annual %)',
+    dataset: 'World Development Indicators', sourceOrganization: 'IMF', sourceUpdatedOn: '2026-11-11',
+    sourceUrl: 'https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=CA' });
+  let value = 2.4;
+  const fetcher = {
+    async fetch(indicator) {
+      if (indicator === 'BROKEN') throw new Error('worldbank down');
+      return [obs(2024, value), obs(2023, 3.9), obs(2023, 3.9)];
+    },
+  };
+  const options = { indicators: ['FP.CPI.TOTL.ZG', 'BROKEN'], countries: ['CAN'], years: new YearRange(2023, 2024),
+    log: quiet };
+  try {
+    let report = await refreshMacro(db, fetcher, options);
+    assert.deepEqual([report.succeeded, report.failed], [1, 1]);
+    assert.equal(await macroCount(), 2);
+
+    value = 2.1; // revised
+    report = await refreshMacro(db, fetcher, options);
+    assert.equal(await macroCount(), 2);
+    const { rows: [row] } = await db.query(
+      'SELECT value FROM macro_observations WHERE provider = $1 AND year = 2024', [PROVIDER]);
+    assert.equal(row.value, 2.1);
+    const saved = (await repo.macroObservations(db)).find((o) => o.provider === PROVIDER && o.year === 2024);
+    assert.deepEqual(
+      [saved.dataset, saved.sourceOrganization, saved.sourceUpdatedOn, saved.sourceUrl],
+      ['World Development Indicators', 'IMF', '2026-11-11',
+        'https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=CA']);
+
+    report = await refreshMacro(db, fetcher, { ...options, indicators: ['BROKEN'] });
+    assert.ok(report.nothingSucceeded);
+  } finally {
+    await db.query('DELETE FROM macro_observations WHERE provider = $1', [PROVIDER]);
+  }
 }));
 
 test('the job refreshes the symbols given on the command line', needsDb, () => withDb(async (db) => {

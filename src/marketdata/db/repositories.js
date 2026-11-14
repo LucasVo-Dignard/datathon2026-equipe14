@@ -126,6 +126,20 @@ async function saveRecommendations(db, trends) {
     `ON CONFLICT (symbol, provider, period) DO UPDATE SET ${updateAll(TREND_COLUMNS)}`);
 }
 
+// --- Macro data --------------------------------------------------------------
+
+const MACRO_COLUMNS = ['value', 'country_name', 'indicator_name', 'dataset', 'source_organization',
+  'source_updated_on', 'source_url', 'fetched_at'];
+
+async function saveMacroObservations(db, observations) {
+  const key = (o) => `${o.country}|${o.indicator}|${o.provider}|${o.year}`;
+  const unique = [...new Map(observations.map((o) => [key(o), o])).values()];
+  await insertMany(db, 'macro_observations', ['country', 'indicator', 'provider', 'year', ...MACRO_COLUMNS],
+    unique.map((o) => [o.country, o.indicator, o.provider, o.year, o.value, o.countryName, o.indicatorName,
+      o.dataset, o.sourceOrganization, o.sourceUpdatedOn, o.sourceUrl, o.fetchedAt]),
+    `ON CONFLICT (country, indicator, provider, year) DO UPDATE SET ${updateAll(MACRO_COLUMNS)}`);
+}
+
 // --- Reads -------------------------------------------------------------------
 
 // Latest profile and the last two daily closes of a symbol, from any
@@ -152,6 +166,30 @@ async function latestQuote(db, symbol) {
   };
 }
 
+// Every macro observation, for the macro page. The table stays small (a few
+// indicators x countries x years).
+async function macroObservations(db) {
+  const { rows } = await db.query(
+    `SELECT country, indicator, provider, year, value, country_name, indicator_name, dataset,
+            source_organization, to_char(source_updated_on, 'YYYY-MM-DD') AS source_updated_on, source_url,
+            fetched_at
+       FROM macro_observations ORDER BY indicator, country, year`);
+  return rows.map((r) => ({
+    country: r.country,
+    indicator: r.indicator,
+    provider: r.provider,
+    year: r.year,
+    value: r.value,
+    countryName: r.country_name,
+    indicatorName: r.indicator_name,
+    dataset: r.dataset,
+    sourceOrganization: r.source_organization,
+    sourceUpdatedOn: r.source_updated_on,
+    sourceUrl: r.source_url,
+    fetchedAt: r.fetched_at,
+  }));
+}
+
 module.exports = {
   activeSymbols,
   markRefreshed,
@@ -163,5 +201,7 @@ module.exports = {
   saveNews,
   saveEarnings,
   saveRecommendations,
+  saveMacroObservations,
+  macroObservations,
   latestQuote,
 };
