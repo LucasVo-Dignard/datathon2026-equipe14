@@ -2,16 +2,14 @@
 // ---------------------------------------------------------------------------
 // Stockage des profils investisseurs.
 //
-//   - DATABASE_URL défini -> Postgres (table investor_profiles, voir db/schema.sql)
+//   - DATABASE_URL défini -> Postgres (table investor_profiles, créée par la
+//                            migration Flyway db/migrations/V4__create_investor_profiles.sql)
 //   - sinon               -> fichier JSON du prototype (db.users[username].profile)
 //
 // Un profil stocké a la forme { answers, result, updatedAt } (updatedAt en ms).
 // Le reste de l'app ne passe que par get() / save() : changer de base ne touche
 // que ce fichier.
 // ---------------------------------------------------------------------------
-
-const fs = require('node:fs');
-const path = require('node:path');
 
 function createJsonStore({ db, saveDb }) {
   return {
@@ -43,8 +41,12 @@ function createPgStore({ connectionString }) {
 
   return {
     kind: 'postgres',
+    // Le schéma appartient à Flyway (db/migrations) : on vérifie seulement que la table existe.
     async init() {
-      await pool.query(fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8'));
+      const { rows } = await pool.query("SELECT to_regclass('investor_profiles') AS t");
+      if (!rows[0].t) {
+        throw new Error('table investor_profiles absente : appliquez les migrations Flyway (voir db/README.md)');
+      }
     },
     async get(username) {
       const { rows } = await pool.query(

@@ -43,19 +43,20 @@ API (logged-in user): `GET /api/profile/questionnaire`, `GET /api/profile`,
 
 `profile-store.js` is the only file that reads or writes profiles:
 
-- **`DATABASE_URL` set** → Postgres, table `investor_profiles` (`db/schema.sql`,
-  created at startup if missing). Needs the `pg` package (`npm install`).
+- **`DATABASE_URL` set** → Postgres, table `investor_profiles`. The table is created
+  by the Flyway migration `db/migrations/V4__create_investor_profiles.sql` (see
+  `db/README.md`), not by the app. If it is missing, the server refuses to start.
+  Needs the `pg` package (`npm install`).
 - **not set** → the prototype JSON file (`db.users[username].profile`), so the app
   still runs without a database.
 
 ```bash
-DATABASE_URL=postgres://user:password@host:5432/dbname npm start
+DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm start   # local docker compose DB
 ```
 
-Never commit the URL: it contains the password. Put it in a gitignored `.env*` file.
+Never commit a real URL: it contains the password (RDS keeps it in Secrets Manager).
 For RDS, append `?sslmode=require`. Users and sessions are still in the JSON file
-(login prototype). Once a SQL `users` table exists, add the foreign key noted in
-`db/schema.sql`.
+(login prototype). Once a SQL `users` table exists, add the foreign key in a new migration.
 All thresholds are prototype assumptions, for simulation only, not financial advice.
 
 Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**

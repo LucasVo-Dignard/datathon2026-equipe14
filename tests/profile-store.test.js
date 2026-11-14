@@ -1,7 +1,10 @@
 'use strict';
 // JSON backend always runs. Postgres backend runs only if TEST_DATABASE_URL is set,
 // e.g. TEST_DATABASE_URL=postgres://localhost:5433/test npm test
-// WARNING: it drops and recreates the investor_profiles table in that database.
+// WARNING: it drops and recreates the investor_profiles table in that database,
+// applying db/migrations/V4__create_investor_profiles.sql (what Flyway runs).
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createProfileStore } = require('../app/profile-store');
@@ -14,7 +17,6 @@ const sample = (id) => {
 
 async function exerciseStore(store) {
   await store.init();
-  await store.init(); // idempotent
   assert.equal(await store.get('nobody'), null);
 
   const saved = await store.save('alice', sample('robert'));
@@ -51,6 +53,9 @@ test('Postgres store', { skip: !process.env.TEST_DATABASE_URL && 'TEST_DATABASE_
   await admin.connect();
   await admin.query('DROP TABLE IF EXISTS investor_profiles');
   try {
+    await assert.rejects(store.init(), /migrations Flyway/, 'init() reports a missing migration');
+    await admin.query(fs.readFileSync(
+      path.join(__dirname, '..', 'db', 'migrations', 'V4__create_investor_profiles.sql'), 'utf8'));
     await exerciseStore(store);
     const { rows } = await admin.query('SELECT username, risk_level, score FROM investor_profiles ORDER BY username');
     assert.deepEqual(rows.map((r) => [r.username, r.risk_level]), [['alice', 'eleve'], ['bob', 'modere']]);
