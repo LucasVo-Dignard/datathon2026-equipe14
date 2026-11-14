@@ -25,7 +25,7 @@ echo "==> Environment: $ENV_NAME"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 REPO_URL="$(terraform -chdir=infra-batch output -raw ecr_repository_url)"
 TAG="$(git rev-parse --short HEAD)"
-if [ -n "$(git status --porcelain -- src pyproject.toml infra-batch/Dockerfile infra-batch/Dockerfile.dockerignore)" ]; then
+if [ -n "$(git status --porcelain -- src package.json package-lock.json infra-batch/Dockerfile infra-batch/Dockerfile.dockerignore)" ]; then
   TAG="$TAG-dirty"
 fi
 

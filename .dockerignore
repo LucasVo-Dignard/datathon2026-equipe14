@@ -1,7 +1,8 @@
-# Only package*.json and app/ go into the image.
+# Only package*.json, app/ and src/ (market data fetchers) go into the image.
 *
 !package.json
 !package-lock.json
 !app/
+!src/
 app/data/
 app/**/*.md

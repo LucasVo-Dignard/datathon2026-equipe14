@@ -7,6 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY app/ ./app/
+COPY src/ ./src/
 
 # Prototype JSON data (users, sessions, chats) lives on a host volume mounted at /data.
 RUN mkdir /data && chown node:node /data
