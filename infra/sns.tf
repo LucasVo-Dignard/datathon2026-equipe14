@@ -32,9 +32,10 @@ data "aws_iam_policy_document" "price_alerts_topic" {
   }
 
   statement {
-    sid       = "DenyInsecureTransport"
-    effect    = "Deny"
-    actions   = ["sns:*"]
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+    # Topic policies only accept topic actions (not "sns:*").
+    actions   = ["sns:Publish", "sns:Subscribe", "sns:GetTopicAttributes", "sns:ListSubscriptionsByTopic"]
     resources = [aws_sns_topic.price_alerts.arn]
     principals {
       type        = "*"
