@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#ffffff">
   <title>Chatbot – équipe 14</title>
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -21,7 +22,8 @@
 
   <!-- App -->
   <div id="app-view" class="app" hidden>
-    <aside class="sidebar">
+    <div id="backdrop" class="backdrop"></div>
+    <aside id="sidebar" class="sidebar">
       <button id="new-chat" class="new-chat">+ Nouvelle conversation</button>
       <nav id="chat-list" class="chat-list" aria-label="Conversations"></nav>
       <div class="account">
@@ -32,7 +34,9 @@
 
     <section class="chat">
       <header class="chat-header">
+        <button id="menu" class="header-btn menu-btn" aria-label="Conversations" aria-controls="sidebar" aria-expanded="false">☰</button>
         <h2 id="chat-title">Nouvelle conversation</h2>
+        <button id="new-chat-mobile" class="header-btn menu-btn" aria-label="Nouvelle conversation">✚</button>
       </header>
       <div id="messages" class="messages">
         <div id="empty" class="empty">
@@ -40,7 +44,7 @@
         </div>
       </div>
       <form id="composer" class="composer">
-        <textarea id="input" rows="1" maxlength="4000" placeholder="Écrivez un message…  (Maj+Entrée pour une nouvelle ligne)"></textarea>
+        <textarea id="input" rows="1" maxlength="4000" placeholder="Écrivez un message…"></textarea>
         <button id="send" type="submit" aria-label="Envoyer">➤</button>
       </form>
     </section>

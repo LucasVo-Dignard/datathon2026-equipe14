@@ -42,8 +42,20 @@ async function showApp(username) {
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar
+// Sidebar (a slide-in drawer on phones)
 // ---------------------------------------------------------------------------
+
+const mobileQuery = window.matchMedia('(max-width: 768px)');
+
+function setSidebar(open) {
+  $('app-view').classList.toggle('sidebar-open', open);
+  $('menu').setAttribute('aria-expanded', String(open));
+}
+
+// Don't pop the on-screen keyboard open on phones when switching chats.
+function focusInput() {
+  if (!mobileQuery.matches) $('input').focus();
+}
 
 function renderChatList() {
   const list = $('chat-list');
@@ -90,7 +102,8 @@ function newChat() {
   setTitle(DEFAULT_TITLE);
   renderMessages([]);
   renderChatList();
-  $('input').focus();
+  setSidebar(false);
+  focusInput();
 }
 
 async function openChat(id) {
@@ -99,7 +112,8 @@ async function openChat(id) {
   setTitle(chat.title);
   renderMessages(chat.messages);
   renderChatList();
-  $('input').focus();
+  setSidebar(false);
+  focusInput();
 }
 
 async function renameChat(chat) {
@@ -181,7 +195,7 @@ async function send() {
   } finally {
     state.sending = false;
     $('send').disabled = false;
-    input.focus();
+    focusInput();
   }
 }
 
@@ -211,10 +225,18 @@ $('logout').addEventListener('click', async () => {
   await api('POST', '/api/logout').catch(() => {});
   state.chats = [];
   state.currentId = null;
+  setSidebar(false);
   showLogin();
 });
 
 $('new-chat').addEventListener('click', newChat);
+$('new-chat-mobile').addEventListener('click', newChat);
+$('menu').addEventListener('click', () => setSidebar(true));
+$('backdrop').addEventListener('click', () => setSidebar(false));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') setSidebar(false);
+});
+mobileQuery.addEventListener('change', () => setSidebar(false));
 
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -222,7 +244,8 @@ $('composer').addEventListener('submit', (e) => {
 });
 
 $('input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+  // On phones, Enter inserts a new line; the send button sends.
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !mobileQuery.matches) {
     e.preventDefault();
     send();
   }
