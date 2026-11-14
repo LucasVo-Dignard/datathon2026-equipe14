@@ -1,0 +1,39 @@
+# Local development database, same engine and major version as RDS.
+#
+#   docker compose -f db/docker-compose.yml up -d postgres
+#   docker compose -f db/docker-compose.yml run --rm flyway migrate
+#
+# Postgres listens on 127.0.0.1 only. The password is a local throwaway,
+# not an AWS credential; override it with LOCAL_DB_PASSWORD if you like.
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: marketdata
+      POSTGRES_USER: bncd_admin
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:-localdev}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bncd_admin -d marketdata"]
+      interval: 2s
+      retries: 30
+
+  flyway:
+    image: flyway/flyway:13
+    working_dir: /flyway/project
+    volumes:
+      - ./:/flyway/project:ro
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/marketdata
+      FLYWAY_USER: bncd_admin
+      FLYWAY_PASSWORD: ${LOCAL_DB_PASSWORD:-localdev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
