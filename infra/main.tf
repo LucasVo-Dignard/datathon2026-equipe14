@@ -145,8 +145,19 @@ locals {
 
   app_files = [
     for f in sort(fileset(local.app_dir, "**")) : {
-      path    = f
-      content = trimsuffix(file("${local.app_dir}/${f}"), "\n")
+      path = f
+      # Light minification to save user_data space: drop indentation, and
+      # comment-only lines in JS/CSS. The files in Git keep their comments.
+      content = trimsuffix(
+        replace(
+          replace(
+            replace(file("${local.app_dir}/${f}"), "/(?m)^[ \\t]+/", ""),
+            "/(?m)^//.*\\n/", ""
+          ),
+          "/(?m)^/\\*.*\\*/\\n/", ""
+        ),
+        "\n"
+      )
     } if !startswith(f, "data/") && !startswith(f, "node_modules/") && !endswith(f, ".md")
   ]
 
