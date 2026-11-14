@@ -13,10 +13,19 @@ seems to require it. If a request conflicts with them, stop and ask.
    Public Access activé, ce qui est le réglage par défaut.
    - Never disable Block Public Access, add public bucket policies or ACLs, or
      enable static website hosting on a bucket.
-2. **NE CRÉEZ PAS d'instance RDS ni de cluster EMR avec l'accès public activé.**
+2. **NE CRÉEZ PAS d'instance EC2 avec un groupe de sécurité ouvert à Internet.**
+   - No inbound rule with `0.0.0.0/0` or `::/0`, on any port.
+   - Inbound traffic is allowed only from an explicit IP allowlist
+     (`allowed_cidrs` in `infra/`). It currently allows the `132.207.0.0/16`
+     network range, plus `/32` addresses for individual machines when needed.
+     Any range narrower than `/0` is acceptable if the team asked for it.
+   - Databases (`infra-db/`) have no CIDR rules at all: they accept traffic
+     only from the web server's security group.
+   - Outbound `0.0.0.0/0` is fine, since it doesn't allow anything in.
+3. **NE CRÉEZ PAS d'instance RDS ni de cluster EMR avec l'accès public activé.**
    - `publicly_accessible = false` for RDS. Keep EMR in private subnets with
      no public master node.
-3. **NE METTEZ PAS d'identifiants AWS dans un dépôt Git.** Si une clé d'accès se
+4. **NE METTEZ PAS d'identifiants AWS dans un dépôt Git.** Si une clé d'accès se
    retrouve sur GitHub, considérez qu'elle est compromise en quelques minutes.
    - Credentials live only in `.env-aws` (gitignored by `.env*`). Never print
      their values, copy them into other files, or hardcode them in code or
@@ -25,11 +34,12 @@ seems to require it. If a request conflicts with them, stop and ask.
      contains the generated SSH private key. It is stored only in the private
      S3 state bucket (see `infra/backend.tf`).
    - Before any commit, check that `git status` and the diff contain no secrets.
-4. **LIMITEZ les ressources que vous lancez à ce dont votre projet a vraiment
+5. **LIMITEZ les ressources que vous lancez à ce dont votre projet a vraiment
    besoin, et arrêtez tout ce que vous n'utilisez pas.**
-   - Use the smallest instance or disk sizes that work (default `t3.micro`,
-     8 GiB). Skip extras that cost money while idle, such as Elastic IPs and
-     NAT gateways, unless we actually need them.
+   - Keep instance and disk sizes modest: `t3.micro` and 8 GiB for EC2,
+     `db.t4g.small` and 20 GiB for RDS. Don't go bigger without a reason.
+     Skip extras that cost money while idle, such as Elastic IPs and NAT
+     gateways, unless we actually need them.
    - Stop idle instances (`instance_running = false`) or `terraform destroy`.
 
 Always ask before `terraform apply`, `terraform destroy`, or any command that
@@ -40,7 +50,22 @@ creates or deletes AWS resources.
 - Load credentials in Git Bash: `set -a; source .env-aws; set +a`
   (temporary session token: reload when it expires).
 - Region: `us-east-1`.
-- Infrastructure is in `infra/` (Terraform). See `infra/README.md`.
+- Infrastructure is Terraform, in two stacks with separate states:
+  `infra/` (VPC, EC2 web server) and `infra-db/` (private RDS). See each
+  folder's README. Apply `infra/` first and destroy `infra-db/` first.
 - Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
   (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
   `terraform destroy` does not delete it).
+
+## Database
+
+- RDS PostgreSQL 17 (`infra-db/`). Data is loaded on demand: check the DB
+  first, call a fetcher (`src/marketdata`) only if data is missing or stale.
+- Schema changes go only through Flyway migrations in `db/migrations/`
+  (`V<n>__<description>.sql`). Never edit a migration that has been applied;
+  add a new one. See `db/README.md`.
+- Test migrations locally first: `cd db && docker compose up -d postgres &&
+  docker compose run --rm flyway migrate`.
+- Apply them to RDS with `python db/migrate.py` (runs Flyway on the web
+  server through SSM; `info` first to preview). No GitHub Actions: we don't
+  have the credits.

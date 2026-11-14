@@ -1,0 +1,3 @@
+# app/ is embedded in the EC2 user_data (infra/main.tf). Same bytes on every OS,
+# otherwise a Windows checkout (CRLF) changes user_data and replaces the instance.
+app/** text eol=lf

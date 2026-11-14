@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars (gitignored) and adjust.
+
+# engine         = "postgres"   # or "mysql"
+# engine_version = "17"
+# instance_class = "db.t4g.small"

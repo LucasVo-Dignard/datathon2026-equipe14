@@ -47,15 +47,16 @@ variable "web_ports" {
 }
 
 variable "allow_my_ip" {
-  description = "Automatically allow the public IP of the machine running terraform."
+  description = "Also allow the public IP of the machine running terraform. Off by default: our machines are inside allowed_cidrs, and a per-machine IP would make each teammate's apply different."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "allowed_cidrs" {
   description = "Extra IPv4 CIDRs (e.g. teammates' IPs as \"203.0.113.4/32\") allowed to reach the instance. Opening to the whole internet is forbidden."
   type        = list(string)
-  default     = []
+  # Polytechnique Montreal network (see CLAUDE.md, rule 2).
+  default = ["132.207.0.0/16"]
 
   validation {
     condition     = alltrue([for c in var.allowed_cidrs : can(cidrhost(c, 0)) && !endswith(c, "/0")])

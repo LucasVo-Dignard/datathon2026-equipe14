@@ -1,0 +1,13 @@
+# Flyway configuration shared by every environment.
+#
+# The connection is NOT configured here. Pass it with environment variables,
+# so no host or password is ever committed:
+#   FLYWAY_URL       jdbc:postgresql://<host>:5432/marketdata
+#   FLYWAY_USER      bncd_admin
+#   FLYWAY_PASSWORD  from Secrets Manager (see db/README.md)
+
+[flyway]
+locations = ["filesystem:migrations"]
+validateMigrationNaming = true
+# Never run `flyway clean` (it drops every object in the schema).
+cleanDisabled = true

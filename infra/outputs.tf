@@ -22,3 +22,8 @@ output "ssh_command" {
   description = "SSH command (requires enable_ssh = true)."
   value       = "ssh -i ${local_sensitive_file.private_key.filename} ec2-user@${aws_eip.web.public_ip}"
 }
+
+output "web_role_name" {
+  description = "IAM role of the web server (other stacks attach their permissions to it)."
+  value       = aws_iam_role.web.name
+}
