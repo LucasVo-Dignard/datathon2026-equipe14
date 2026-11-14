@@ -45,30 +45,37 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Accueil : questionnaire vierge ou prérempli à partir d'un persona du cas
+  // Accueil : questionnaire, ou profil créé directement à partir d'un persona du cas
   // ---------------------------------------------------------------------------
 
   function renderIntro() {
+    const error = h('p', { class: 'error', role: 'alert' });
     render(
       h('h1', {}, 'Votre profil investisseur'),
       h('p', { class: 'lead' }, `Quelques questions (${st.questions.length}, environ 5 minutes) pour comprendre vos objectifs, `
         + 'vos préférences et votre rapport au risque. Les agents s’appuieront sur ce profil pour adapter et expliquer leurs analyses.'),
-      h('button', { class: 'primary', onclick: () => start({}, null) }, 'Commencer le questionnaire'),
+      h('button', { class: 'primary', onclick: () => start({}) }, 'Commencer le questionnaire'),
       h('h2', {}, 'Ou partez d’un persona du cas'),
-      h('p', { class: 'muted' }, 'Les réponses sont préremplies : vous pourrez les vérifier et les ajuster une à une.'),
-      h('div', { class: 'personas' }, st.personas.map((p) => h('button', { class: 'persona', onclick: () => start(p.answers, p) },
+      h('p', { class: 'muted' }, 'Le profil est créé directement avec ses réponses, sans passer par les questions. Vous pourrez les ajuster ensuite.'),
+      h('div', { class: 'personas' }, st.personas.map((p) => h('button', { class: 'persona', onclick: () => usePersona(p, error) },
         h('strong', {}, p.name), h('span', { class: 'muted' }, `${p.age} ans · ${p.job}`),
         h('span', {}, `Risque : ${p.risk} · Horizon : ${p.horizon}`),
         h('span', { class: 'small' }, p.summary)))),
+      error,
       disclaimer(),
     );
   }
 
-  function start(answers, persona) {
+  function start(answers) {
     st.answers = structuredClone(answers);
-    st.persona = persona;
     st.step = 0;
     renderStep();
+  }
+
+  // Persona choisi : on enregistre ses réponses et on montre le résultat directement.
+  function usePersona(persona, error) {
+    st.answers = structuredClone(persona.answers);
+    submit(error, persona);
   }
 
   // ---------------------------------------------------------------------------
@@ -114,7 +121,6 @@
       h('div', { class: 'progress', 'aria-label': `Question ${st.step + 1} sur ${total}` },
         h('div', { style: `width:${((st.step + 1) / total) * 100}%` })),
       h('p', { class: 'muted small' }, `${q.section} · Question ${st.step + 1} / ${total}`),
-      st.persona ? h('p', { class: 'note' }, `Prérempli d’après le persona ${st.persona.name} : vérifiez ou modifiez la réponse.`) : null,
       h('h2', { class: 'question' }, q.text),
       q.help ? h('p', { class: 'muted' }, q.help) : null,
       input,
@@ -132,10 +138,10 @@
     if (input.tagName === 'INPUT') input.focus();
   }
 
-  async function submit(error) {
+  async function submit(error, persona = null) {
     try {
       st.profile = await api('PUT', '/api/profile', { answers: st.answers });
-      st.persona = null;
+      st.persona = persona; // persona dont vient le profil (affiché sur le résultat), sinon null
       updateBadge();
       renderResult();
     } catch (err) {
@@ -163,6 +169,10 @@
 
     render(
       h('h1', {}, 'Votre profil investisseur'),
+      st.persona ? h('div', { class: 'note persona-note' },
+        h('span', {}, `Profil créé à partir du persona ${st.persona.name} (${st.persona.age} ans, ${st.persona.job.toLowerCase()}). `
+          + 'Si votre situation est différente, ajustez les réponses.'),
+        h('button', { class: 'secondary', onclick: () => start(st.profile.answers) }, 'Ajuster les réponses')) : null,
       h('div', { class: 'p-card p-hero' },
         h('span', { class: 'muted' }, 'Niveau de risque retenu'),
         h('div', { class: `level lvl-${r.level.id}` }, r.level.label),
@@ -210,7 +220,7 @@
           h('div', { class: 'bar' }, h('div', { style: `width:${m.similarity}%` })), h('b', {}, `${m.similarity} %`)))),
 
       h('div', { class: 'p-nav' },
-        h('button', { class: 'secondary', onclick: () => start(st.profile.answers, null) }, 'Modifier mes réponses'),
+        h('button', { class: 'secondary', onclick: () => start(st.profile.answers) }, 'Modifier mes réponses'),
         h('button', { class: 'secondary', onclick: renderIntro }, 'Recommencer'),
         h('button', { class: 'primary', onclick: () => window.dispatchEvent(new Event('profile:done')) }, 'Discuter avec l’assistant →')),
       disclaimer(),

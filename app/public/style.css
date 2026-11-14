@@ -168,6 +168,7 @@ h1, h2, h3 { margin: 0; }
 .profile p { margin: 0 0 8px; }
 .profile .lead { font-size: 1.05rem; }
 .profile .note { background: #eaf1fb; border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 4px; }
+.persona-note { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .profile .primary, .profile .secondary { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--accent); }
 .profile .primary { background: var(--accent); color: #fff; }
 .profile .secondary { background: var(--panel); border-color: var(--border); }
