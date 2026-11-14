@@ -1,7 +1,9 @@
 # Chatbot (prototype)
 
 Node.js server: username-only login (no password, this is
-a prototype), conversations per user, data in a JSON file.
+a prototype), conversations per user. Profiles and conversations are stored in
+Postgres when `DATABASE_URL` is set; users and login sessions (and everything,
+without a database) are in a JSON file.
 
 - `server.js`: API (`/api/login`, `/api/chats`, ...) and static files
 - `bot.js`: **the agent**. Basic version: Claude Opus 5.5 on Amazon Bedrock
@@ -9,6 +11,7 @@ a prototype), conversations per user, data in a JSON file.
   conversation history and the user's investor `profile` (summary added to the
   system prompt). Refusals fall back to Claude Opus 4.8.
   `AGENT_MODEL` / `AGENT_EFFORT` env vars override the model and effort.
+- `chat-store.js`: conversation history (see [Conversations](#conversations)).
 - `profile.js`: investor profile. Guided questionnaire, risk scoring, matching with the
   case personas (Amira, Mateo, Robert), tensions and guardrails for the agents.
 - `stocks.js`: quick view for the ticker search bar (`GET /api/stocks/:symbol`): name,
@@ -73,6 +76,19 @@ certificates shipped in the image. If the environment has no database yet, the
 app uses the JSON file. Users and sessions are still in the JSON file
 (login prototype). Once a SQL `users` table exists, add the foreign key in a new migration.
 All thresholds are prototype assumptions, for simulation only, not financial advice.
+
+## Conversations
+
+`chat-store.js` is the only file that reads or writes conversations, with the same
+rule as profiles:
+
+- **`DATABASE_URL` set** → Postgres: `chats` (id, owner, title, dates) and
+  `chat_messages` (one row per message, deleted with their chat). Created by
+  `db/migrations/V5__create_chats.sql`; the server refuses to start if they are missing.
+  The question and the agent's answer are saved together, once the answer is known.
+- **not set** → the prototype JSON file (`db.chats`).
+
+Conversations already in an environment's JSON file are not copied to the database.
 
 Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**
 database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`.
