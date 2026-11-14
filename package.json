@@ -1,8 +1,11 @@
 {
   "scripts": {
-    "dev": "node --watch app/server.js"
+    "start": "node app/server.js",
+    "dev": "node --watch app/server.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1169.0"
+    "@aws-sdk/client-s3": "^3.1169.0",
+    "pg": "^8.23.1"
   }
 }

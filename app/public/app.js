@@ -38,17 +38,21 @@ async function showApp(username) {
   $('login-view').hidden = true;
   $('app-view').hidden = false;
   $('account-name').textContent = username;
-  setTab('portfolio');
   window.Dashboard.load();
-  state.chats = await api('GET', '/api/chats');
+  const [chats, hasProfile] = await Promise.all([api('GET', '/api/chats'), window.Profile.init()]);
+  // First visit: guide the user through the investor-profile questionnaire.
+  setTab(hasProfile ? 'portfolio' : 'profile');
+  state.chats = chats;
   if (state.chats.length) await openChat(state.chats[0].id);
   else newChat();
 }
 
-// Phones show one pane at a time; desktop shows both side by side.
+// Tabs: portfolio | profile | assistant. On desktop the left pane shows the
+// dashboard or the profile and the assistant is always visible on the right;
+// phones show one pane at a time.
 function setTab(tab) {
   $('app-view').dataset.tab = tab;
-  for (const b of document.querySelectorAll('.tabbar button')) {
+  for (const b of document.querySelectorAll('button[data-tab]')) {
     b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   }
   if (tab === 'portfolio') window.Dashboard.redraw();
@@ -257,9 +261,15 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('history').hidden) setHistory(false);
 });
 
-for (const b of document.querySelectorAll('.tabbar button')) {
+for (const b of document.querySelectorAll('button[data-tab]')) {
   b.addEventListener('click', () => setTab(b.dataset.tab));
 }
+
+// "Discuter avec l'assistant" on the profile result page.
+window.addEventListener('profile:done', () => {
+  setTab(mobileQuery.matches ? 'assistant' : 'portfolio');
+  focusInput();
+});
 
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();

@@ -27,3 +27,8 @@ output "web_role_name" {
   description = "IAM role of the web server (other stacks attach their permissions to it)."
   value       = aws_iam_role.web.name
 }
+
+output "ecr_repository_url" {
+  description = "ECR repository of the app image (pushed by ../scripts/deploy-app.sh)."
+  value       = aws_ecr_repository.app.repository_url
+}

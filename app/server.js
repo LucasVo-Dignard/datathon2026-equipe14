@@ -7,6 +7,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { reply } = require('./bot');
+const profile = require('./profile');
+const { createProfileStore } = require('./profile-store');
 const { getPortfolio } = require('./portfolio');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -40,6 +42,9 @@ function saveDb() {
   fs.writeFileSync(tmp, JSON.stringify(db));
   fs.renameSync(tmp, DATA_FILE);
 }
+
+// Profils investisseurs : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
+const profiles = createProfileStore({ db, saveDb });
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -157,6 +162,26 @@ async function handleApi(req, res, pathname) {
 
   const user = requireUser(req);
 
+  if (pathname === '/api/profile/questionnaire' && method === 'GET') {
+    return sendJson(res, 200, profile.publicQuestionnaire());
+  }
+
+  if (pathname === '/api/profile') {
+    if (method === 'GET') return sendJson(res, 200, await profiles.get(user));
+    if (method === 'PUT') {
+      const body = await readJson(req);
+      let answers;
+      try {
+        answers = profile.validate(body.answers);
+      } catch (err) {
+        if (err instanceof profile.ProfileError) throw new HttpError(400, err.message);
+        throw err;
+      }
+      const saved = await profiles.save(user, { answers, result: profile.buildProfile(answers), updatedAt: Date.now() });
+      return sendJson(res, 200, saved);
+    }
+  }
+
   if (pathname === '/api/portfolio' && method === 'GET') {
     return sendJson(res, 200, getPortfolio(user));
   }
@@ -212,12 +237,19 @@ async function handleApi(req, res, pathname) {
         chat.title = text.length > 40 ? `${text.slice(0, 40)}…` : text;
       }
 
+      // Si la base est indisponible, l'agent répond quand même, sans le profil.
+      const investorProfile = await profiles.get(user).then((p) => p?.result || null, (err) => {
+        console.error('profile load error:', err.message);
+        return null;
+      });
+
       let answer;
       try {
         answer = await reply({
           messages: chat.messages.map(({ role, content }) => ({ role, content })),
           username: user,
           chatId: chat.id,
+          profile: investorProfile,
           portfolio: getPortfolio(user),
         });
       } catch (err) {
@@ -245,6 +277,7 @@ const STATIC = {
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
+  '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
@@ -281,4 +314,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`chatbot listening on :${PORT}`));
+profiles.init().then(
+  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils : ${profiles.kind})`)),
+  (err) => {
+    console.error(`Impossible d'initialiser le stockage des profils (${profiles.kind}) :`, err.message || err.code || err);
+    process.exit(1);
+  },
+);

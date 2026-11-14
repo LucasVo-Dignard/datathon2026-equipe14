@@ -157,6 +157,101 @@ h1, h2, h3 { margin: 0; }
 .table .name { display: block; color: var(--text-2); font-size: 0.8rem; }
 .table .block { display: block; }
 
+/* -------------------------------------------------------------- Tabs */
+.top-tabs { display: flex; gap: 4px; margin-right: auto; margin-left: 16px; }
+.top-tabs button {
+  border: 0; background: none; border-radius: 8px; padding: 6px 12px; color: var(--text-2);
+  display: flex; align-items: center; gap: 8px;
+}
+.top-tabs button:hover { background: var(--hover); }
+.top-tabs button[aria-pressed="true"] { background: var(--hover); color: var(--text); font-weight: 600; }
+.app[data-tab="profile"] .dashboard,
+.app:not([data-tab="profile"]) .profile { display: none; }
+
+/* ----------------------------------------------------- Investor profile */
+.badge {
+  font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  color: #fff; background: var(--lvl);
+}
+.badge.todo { --lvl: #b45309; }
+.lvl-faible { --lvl: #2a78d6; }
+.lvl-faible-modere { --lvl: #0f766e; }
+.lvl-modere { --lvl: #8a6d00; }
+.lvl-modere-eleve { --lvl: #c2410c; }
+.lvl-eleve { --lvl: #b91c1c; }
+
+.profile { overflow-y: auto; min-width: 0; }
+.profile-body { max-width: 760px; margin: 0 auto; padding: 28px 24px 48px; line-height: 1.5; }
+.profile h1 { font-size: 1.6rem; margin-bottom: 8px; }
+.profile h2 { margin: 28px 0 10px; font-size: 1.1rem; }
+.profile h2.question { margin-top: 8px; font-size: 1.35rem; }
+.profile h3 { font-size: 0.95rem; margin: 12px 0 4px; }
+.profile p { margin: 0 0 8px; }
+.profile .lead { font-size: 1.05rem; }
+.profile .note { background: #eaf1fb; border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 4px; }
+.profile .primary, .profile .secondary { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--accent); }
+.profile .primary { background: var(--accent); color: #fff; }
+.profile .secondary { background: var(--panel); border-color: var(--border); }
+.profile .secondary:hover { background: var(--hover); }
+
+.personas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.persona {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+}
+.persona:hover, .option:hover { border-color: var(--accent); }
+
+.progress { height: 6px; background: var(--hover); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+.progress div { height: 100%; background: var(--accent); transition: width 0.2s; }
+.options { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 8px; }
+.option {
+  padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  text-align: left; cursor: pointer; display: flex; gap: 10px; align-items: center;
+}
+.option.selected { border-color: var(--accent); background: #eaf1fb; font-weight: 600; }
+.amount { padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; font: inherit; width: 100%; margin: 16px 0 8px; }
+.p-nav { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; margin-top: 20px; }
+
+.p-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.p-hero { text-align: center; }
+.level { font-size: 2rem; font-weight: 700; color: var(--lvl); }
+.gauge {
+  position: relative; display: grid; grid-template-columns: repeat(5, 1fr); margin: 12px 0 16px;
+  height: 28px; border-radius: 6px; font-size: 0.7rem; color: #fff;
+  background: linear-gradient(90deg, #2a78d6, #0f766e, #8a6d00, #c2410c, #b91c1c);
+}
+.gauge span { display: grid; place-items: center; text-align: center; line-height: 1.1; border-right: 1px solid rgba(255, 255, 255, 0.5); }
+.gauge span:last-of-type { border-right: 0; }
+.gauge i {
+  position: absolute; top: -6px; bottom: -6px; width: 8px; margin-left: -4px;
+  background: var(--text); border: 2px solid #fff; border-radius: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.grid3 .p-card { display: flex; flex-direction: column; }
+.big { font-size: 1.6rem; font-weight: 700; }
+.profile details { margin-top: 12px; }
+.profile summary { cursor: pointer; color: var(--accent); }
+.factors { list-style: none; padding: 0; margin: 0; }
+.factors li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.tension { border-left: 4px solid; border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; }
+.tension p { margin: 4px 0 0; }
+.tension.warning { border-color: #c2410c; background: #fdf0e8; }
+.tension.info { border-color: var(--accent); background: #eaf1fb; }
+.prefs { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; margin: 0; }
+.prefs dt { color: var(--text-2); }
+.prefs dd { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--hover); border-radius: 999px; padding: 2px 10px; font-size: 0.85rem; }
+.guardrails { margin: 0; padding-left: 20px; }
+.match { display: grid; grid-template-columns: 70px 1fr 48px; align-items: center; gap: 8px; margin-top: 6px; }
+.bar { height: 8px; background: var(--hover); border-radius: 4px; overflow: hidden; }
+.bar div { height: 100%; background: var(--accent); }
+.disclaimer { margin-top: 32px; font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; }
+@media (max-width: 480px) {
+  .prefs { grid-template-columns: 1fr; gap: 2px; }
+  .prefs dd { margin-bottom: 8px; }
+}
+
 /* ----------------------------------------------------------- Assistant */
 .assistant {
   min-height: 0; display: flex; flex-direction: column;
@@ -217,7 +312,10 @@ h1, h2, h3 { margin: 0; }
 @media (max-width: 900px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .app[data-tab="portfolio"] .assistant,
+  .app[data-tab="profile"] .assistant,
   .app[data-tab="assistant"] .dashboard { display: none; }
+  .top-tabs { display: none; }
+  .profile-body { padding: 16px 12px 32px; }
   .assistant { border-left: 0; }
 
   .tabbar {
