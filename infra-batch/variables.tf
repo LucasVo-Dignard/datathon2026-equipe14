@@ -23,9 +23,9 @@ variable "refresh_enabled" {
 }
 
 variable "schedule_enabled" {
-  description = "Set to false to pause the daily run without destroying anything."
+  description = "Set to false to pause the daily run without destroying anything. Default: on in prod, off in dev environments (run the job by hand there)."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "schedule_expression" {

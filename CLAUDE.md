@@ -55,6 +55,12 @@ creates or deletes AWS resources.
   `infra/` (VPC, EC2 web server), `infra-db/` (private RDS) and
   `infra-batch/` (daily refresh job on AWS Batch Fargate). See each folder's
   README. Apply in that order; destroy in reverse (`infra-batch/` first).
+- Environments (see `ENVIRONMENTS.md`): prod is the `default` Terraform
+  workspace; each developer has their own (`lucas`, `andre`, `youcef`), with
+  its own VPC, EC2, RDS and Batch job, selected by `TF_WORKSPACE` in
+  `.env-dev`. Work in a dev environment by default. Prod needs
+  `-var confirm_prod=true` (Terraform), `--env prod` (`db/migrate.py`) or
+  `TF_WORKSPACE=default` (scripts): only touch it when asked.
 - Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
   (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
   `terraform destroy` does not delete it).

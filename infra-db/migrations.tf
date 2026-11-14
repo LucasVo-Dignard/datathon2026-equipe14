@@ -10,17 +10,17 @@ data "aws_caller_identity" "current" {}
 
 # Created in ../infra (iam.tf).
 data "aws_iam_role" "web" {
-  name = "${var.project_name}-web"
+  name = "${local.prefix}-web"
 }
 
 # --- Private bucket for migration bundles ------------------------------------
 
 resource "aws_s3_bucket" "migrations" {
-  bucket = "${var.project_name}-migrations-${data.aws_caller_identity.current.account_id}"
+  bucket = "${local.prefix}-migrations-${data.aws_caller_identity.current.account_id}"
   # Holds only short-lived copies of db/, so destroy may empty it.
   force_destroy = true
 
-  tags = { Name = "${var.project_name}-migrations" }
+  tags = { Name = "${local.prefix}-migrations" }
 }
 
 # Datathon rule: Block Public Access stays fully on.
@@ -109,7 +109,7 @@ data "aws_iam_policy_document" "web_migrations" {
 }
 
 resource "aws_iam_role_policy" "web_migrations" {
-  name   = "${var.project_name}-db-migrations"
+  name   = "${local.prefix}-db-migrations"
   role   = data.aws_iam_role.web.name
   policy = data.aws_iam_policy_document.web_migrations.json
 }

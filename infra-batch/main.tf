@@ -9,7 +9,7 @@ data "aws_caller_identity" "current" {}
 data "aws_vpc" "main" {
   filter {
     name   = "tag:Name"
-    values = ["${var.project_name}-vpc"]
+    values = ["${local.prefix}-vpc"]
   }
 }
 
@@ -19,22 +19,24 @@ data "aws_subnet" "public" {
   vpc_id = data.aws_vpc.main.id
   filter {
     name   = "tag:Name"
-    values = ["${var.project_name}-public"]
+    values = ["${local.prefix}-public"]
   }
 }
 
 data "aws_db_instance" "main" {
-  db_instance_identifier = "${var.project_name}-db"
+  db_instance_identifier = "${local.prefix}-db"
 }
 
 data "aws_security_group" "db" {
   vpc_id = data.aws_vpc.main.id
-  name   = "${var.project_name}-db"
+  name   = "${local.prefix}-db"
 }
 
 locals {
   db_secret_arn = data.aws_db_instance.main.master_user_secret[0].secret_arn
   db_port       = data.aws_db_instance.main.port
+
+  schedule_enabled = var.schedule_enabled != null ? var.schedule_enabled : local.is_prod
 }
 
 # ---------------------------------------------------------------------------
@@ -45,11 +47,11 @@ locals {
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "job" {
-  name        = "${var.project_name}-batch-job"
+  name        = "${local.prefix}-batch-job"
   description = "Daily refresh job: no inbound, outbound HTTPS and DB only"
   vpc_id      = data.aws_vpc.main.id
 
-  tags = { Name = "${var.project_name}-batch-job" }
+  tags = { Name = "${local.prefix}-batch-job" }
 }
 
 resource "aws_vpc_security_group_egress_rule" "job_https" {
@@ -83,6 +85,6 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_job" {
 }
 
 resource "aws_cloudwatch_log_group" "job" {
-  name              = "/aws/batch/${var.project_name}-daily-refresh"
+  name              = "/aws/batch/${local.prefix}-daily-refresh"
   retention_in_days = var.log_retention_days
 }

@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 
 resource "aws_batch_compute_environment" "main" {
-  compute_environment_name = "${var.project_name}-fargate"
+  compute_environment_name = "${local.prefix}-fargate"
   type                     = "MANAGED"
 
   compute_resources {
@@ -16,7 +16,7 @@ resource "aws_batch_compute_environment" "main" {
 }
 
 resource "aws_batch_job_queue" "main" {
-  name     = "${var.project_name}-jobs"
+  name     = "${local.prefix}-jobs"
   state    = "ENABLED"
   priority = 1
 
@@ -27,7 +27,7 @@ resource "aws_batch_job_queue" "main" {
 }
 
 resource "aws_batch_job_definition" "daily_refresh" {
-  name                  = "${var.project_name}-daily-refresh"
+  name                  = "${local.prefix}-daily-refresh"
   type                  = "container"
   platform_capabilities = ["FARGATE"]
   propagate_tags        = true
@@ -88,10 +88,10 @@ resource "aws_batch_job_definition" "daily_refresh" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "daily_refresh" {
-  name                         = "${var.project_name}-daily-refresh"
+  name                         = "${local.prefix}-daily-refresh"
   schedule_expression          = var.schedule_expression
   schedule_expression_timezone = var.schedule_timezone
-  state                        = var.schedule_enabled ? "ENABLED" : "DISABLED"
+  state                        = local.schedule_enabled ? "ENABLED" : "DISABLED"
 
   flexible_time_window {
     mode = "OFF"

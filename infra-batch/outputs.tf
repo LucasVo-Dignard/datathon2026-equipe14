@@ -25,5 +25,5 @@ output "job_security_group_id" {
 
 output "schedule" {
   description = "When the job runs."
-  value       = "${var.schedule_expression} ${var.schedule_timezone} (${var.schedule_enabled ? "enabled" : "paused"})"
+  value       = "${var.schedule_expression} ${var.schedule_timezone} (${local.schedule_enabled ? "enabled" : "paused"})"
 }

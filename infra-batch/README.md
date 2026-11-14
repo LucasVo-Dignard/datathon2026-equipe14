@@ -20,6 +20,7 @@ It creates:
 - an **AWS Batch** Fargate compute environment (max 1 vCPU), job queue and
   job definition (0.25 vCPU, 1 GiB, 30 min timeout, 1 retry)
 - an **EventBridge Scheduler** schedule: weekdays 18:00 `America/Toronto`
+  (prod only by default; paused in developer environments)
 - a **security group** for the job, plus one ingress rule on the DB security
   group that allows it
 - three IAM roles: execution (pull from the batch ECR repo, write to this

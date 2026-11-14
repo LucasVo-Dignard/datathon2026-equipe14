@@ -21,7 +21,7 @@ data "aws_iam_policy_document" "web_assume" {
 }
 
 resource "aws_iam_role" "web" {
-  name               = "${var.project_name}-web"
+  name               = "${local.prefix}-web"
   assume_role_policy = data.aws_iam_policy_document.web_assume.json
 }
 
@@ -31,6 +31,6 @@ resource "aws_iam_role_policy_attachment" "web_ssm" {
 }
 
 resource "aws_iam_instance_profile" "web" {
-  name = "${var.project_name}-web"
+  name = "${local.prefix}-web"
   role = aws_iam_role.web.name
 }

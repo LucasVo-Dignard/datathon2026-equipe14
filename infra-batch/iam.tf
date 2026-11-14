@@ -24,7 +24,7 @@ data "aws_iam_policy_document" "ecs_tasks_assume" {
 # --- Execution role ------------------------------------------------------------
 
 resource "aws_iam_role" "execution" {
-  name               = "${var.project_name}-batch-execution"
+  name               = "${local.prefix}-batch-execution"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
 }
 
@@ -48,7 +48,7 @@ resource "aws_iam_role_policy" "execution_logs" {
 # (aws/secretsmanager), so no KMS permission is needed.
 
 resource "aws_iam_role" "job" {
-  name               = "${var.project_name}-batch-job"
+  name               = "${local.prefix}-batch-job"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
 }
 
@@ -61,7 +61,7 @@ data "aws_iam_policy_document" "job" {
 }
 
 resource "aws_iam_role_policy" "job" {
-  name   = "${var.project_name}-batch-job-db"
+  name   = "${local.prefix}-batch-job-db"
   role   = aws_iam_role.job.id
   policy = data.aws_iam_policy_document.job.json
 }
@@ -84,7 +84,7 @@ data "aws_iam_policy_document" "scheduler_assume" {
 }
 
 resource "aws_iam_role" "scheduler" {
-  name               = "${var.project_name}-batch-scheduler"
+  name               = "${local.prefix}-batch-scheduler"
   assume_role_policy = data.aws_iam_policy_document.scheduler_assume.json
 }
 
@@ -101,7 +101,7 @@ data "aws_iam_policy_document" "scheduler" {
 }
 
 resource "aws_iam_role_policy" "scheduler" {
-  name   = "${var.project_name}-batch-scheduler"
+  name   = "${local.prefix}-batch-scheduler"
   role   = aws_iam_role.scheduler.id
   policy = data.aws_iam_policy_document.scheduler.json
 }
