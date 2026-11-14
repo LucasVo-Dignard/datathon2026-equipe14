@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored) to override defaults.
+
+# The job is a no-op until this is true (it starts, logs, and exits).
+# refresh_enabled = true
+
+# Pause the daily run without destroying anything.
+# schedule_enabled = false
+
+# Weekdays at 18:00 Toronto time (after the market close).
+# schedule_expression = "cron(0 18 ? * MON-FRI *)"
+# schedule_timezone   = "America/Toronto"
+
+# image_tag      = "latest"
+# job_memory_mib = 1024

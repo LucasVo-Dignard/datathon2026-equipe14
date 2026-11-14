@@ -15,7 +15,8 @@ import pytest
 from marketdata.db import connect
 from marketdata.db import repositories as repo
 from marketdata.errors import ConfigurationError
-from marketdata.jobs.daily_refresh import refresh
+from marketdata.jobs import daily_refresh
+from marketdata.jobs.daily_refresh import refresh, refresh_enabled
 from marketdata.models import (
     AnalystRatingAction,
     FinancialMetrics,
@@ -51,6 +52,26 @@ def test_connect_reads_credentials_from_secret_and_requires_tls():
 def test_connect_without_config_raises():
     with pytest.raises(ConfigurationError, match="DB_HOST"):
         connect({}, connect_fn=lambda **k: None)
+
+
+# --- REFRESH_ENABLED ------------------------------------------------------------
+
+
+def test_refresh_enabled_defaults_on_and_accepts_false_values():
+    assert refresh_enabled({})
+    assert refresh_enabled({"REFRESH_ENABLED": "true"})
+    for off in ("false", "False", "0", "no", "off"):
+        assert not refresh_enabled({"REFRESH_ENABLED": off})
+
+
+def test_disabled_job_does_nothing(monkeypatch):
+    monkeypatch.setenv("REFRESH_ENABLED", "false")
+
+    def fail(*args, **kwargs):
+        raise AssertionError("must not connect when disabled")
+
+    monkeypatch.setattr(daily_refresh, "connect", fail)
+    assert daily_refresh.main([]) == 0
 
 
 # --- Against a real Postgres ----------------------------------------------------
