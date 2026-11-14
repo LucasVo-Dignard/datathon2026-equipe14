@@ -9,14 +9,43 @@ const CURRENCY = 'CAD';
 const CASH = 2450.0;
 
 const HOLDINGS = [
-  { symbol: 'RY', name: 'Banque Royale du Canada', quantity: 40, avgCost: 128.4, price: 171.25, prevClose: 169.9 },
-  { symbol: 'SHOP', name: 'Shopify', quantity: 25, avgCost: 92.1, price: 148.6, prevClose: 152.3 },
-  { symbol: 'TD', name: 'Banque Toronto-Dominion', quantity: 60, avgCost: 84.7, price: 79.15, prevClose: 78.8 },
-  { symbol: 'ENB', name: 'Enbridge', quantity: 80, avgCost: 49.2, price: 58.4, prevClose: 58.65 },
-  { symbol: 'CNR', name: 'Canadien National', quantity: 20, avgCost: 158.0, price: 149.3, prevClose: 148.1 },
-  { symbol: 'AAPL', name: 'Apple', quantity: 15, avgCost: 182.5, price: 231.4, prevClose: 229.0 },
-  { symbol: 'MSFT', name: 'Microsoft', quantity: 10, avgCost: 335.0, price: 428.9, prevClose: 431.2 },
-  { symbol: 'XEQT', name: 'iShares Core Equity ETF Portfolio', quantity: 120, avgCost: 28.6, price: 33.85, prevClose: 33.7 },
+  { symbol: 'RY', sector: 'Finance', name: 'Banque Royale du Canada', quantity: 40, avgCost: 128.4, price: 171.25, prevClose: 169.9 },
+  { symbol: 'SHOP', sector: 'Technologie', name: 'Shopify', quantity: 25, avgCost: 92.1, price: 148.6, prevClose: 152.3 },
+  { symbol: 'TD', sector: 'Finance', name: 'Banque Toronto-Dominion', quantity: 60, avgCost: 84.7, price: 79.15, prevClose: 78.8 },
+  { symbol: 'ENB', sector: 'Énergie', name: 'Enbridge', quantity: 80, avgCost: 49.2, price: 58.4, prevClose: 58.65 },
+  { symbol: 'CNR', sector: 'Industrie', name: 'Canadien National', quantity: 20, avgCost: 158.0, price: 149.3, prevClose: 148.1 },
+  { symbol: 'AAPL', sector: 'Technologie', name: 'Apple', quantity: 15, avgCost: 182.5, price: 231.4, prevClose: 229.0 },
+  { symbol: 'MSFT', sector: 'Technologie', name: 'Microsoft', quantity: 10, avgCost: 335.0, price: 428.9, prevClose: 431.2 },
+  { symbol: 'XEQT', sector: 'FNB diversifié', name: 'iShares Core Equity ETF Portfolio', quantity: 120, avgCost: 28.6, price: 33.85, prevClose: 33.7 },
+];
+
+// Fictional news (prototype), tied to the client's stocks or their sectors.
+// hoursAgo keeps them recent relative to the current time.
+const NEWS = [
+  { hoursAgo: 2, sector: 'Finance', symbols: ['RY'], source: 'Fil financier',
+    title: 'Banque Royale : résultats trimestriels au-dessus des attentes',
+    summary: 'La banque profite de revenus de gestion de patrimoine en hausse et relève légèrement son dividende.' },
+  { hoursAgo: 5, sector: 'Finance', symbols: ['RY', 'TD'], source: 'Économie Canada',
+    title: 'La Banque du Canada maintient son taux directeur',
+    summary: 'Les banques canadiennes réagissent peu ; les analystes surveillent la croissance du crédit hypothécaire.' },
+  { hoursAgo: 9, sector: 'Technologie', symbols: ['SHOP'], source: 'Techno Hebdo',
+    title: 'Shopify lance de nouveaux outils d’IA pour les marchands',
+    summary: 'Les fonctions visent la rédaction de fiches produits et le service à la clientèle automatisé.' },
+  { hoursAgo: 14, sector: 'Énergie', symbols: ['ENB'], source: 'Marchés de l’énergie',
+    title: 'Le pétrole recule après une hausse des stocks américains',
+    summary: 'Les sociétés de pipelines comme Enbridge restent moins exposées aux prix que les producteurs.' },
+  { hoursAgo: 26, sector: 'Technologie', symbols: ['AAPL'], source: 'Techno Hebdo',
+    title: 'Apple renouvelle sa gamme d’ordinateurs portables',
+    summary: 'Nouvelles puces et autonomie accrue ; les précommandes ouvrent la semaine prochaine.' },
+  { hoursAgo: 31, sector: 'Industrie', symbols: ['CNR'], source: 'Transport & logistique',
+    title: 'CN investit dans son réseau ferroviaire de l’Ouest',
+    summary: 'Le programme cible la capacité vers les ports du Pacifique pour les conteneurs et les céréales.' },
+  { hoursAgo: 50, sector: 'Technologie', symbols: ['MSFT', 'AAPL', 'SHOP'], source: 'Marchés mondiaux',
+    title: 'Les valeurs technologiques portées par l’infonuagique',
+    summary: 'La demande des entreprises pour l’IA et le nuage soutient les grandes plateformes, dont Microsoft.' },
+  { hoursAgo: 75, sector: 'FNB diversifié', symbols: ['XEQT'], source: 'Épargne & placements',
+    title: 'Les FNB indiciels attirent toujours les épargnants canadiens',
+    summary: 'Les portefeuilles tout-en-un à faibles frais continuent de recueillir des entrées nettes.' },
 ];
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -97,6 +126,10 @@ function getPortfolio(/* username */) {
     },
     holdings: holdings.sort((a, b) => b.marketValue - a.marketValue),
     history: fakeHistory(total, total - dayChange),
+    news: NEWS.map(({ hoursAgo, ...n }) => ({
+      ...n,
+      publishedAt: new Date(Date.now() - hoursAgo * 3600e3).toISOString(),
+    })),
   };
 }
 
