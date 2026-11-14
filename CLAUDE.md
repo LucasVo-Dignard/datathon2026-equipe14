@@ -23,7 +23,8 @@ seems to require it. If a request conflicts with them, stop and ask.
      their values, copy them into other files, or hardcode them in code or
      Terraform.
    - Also never commit `*.tfstate`, `*.tfvars` or `*.pem`. The Terraform state
-     contains the generated SSH private key.
+     contains the generated SSH private key. It is stored only in the private
+     S3 state bucket (see `infra/backend.tf`).
    - Before any commit, check that `git status` and the diff contain no secrets.
 5. **LIMITEZ les ressources que vous lancez à ce dont votre projet a vraiment
    besoin, et arrêtez tout ce que vous n'utilisez pas.**
@@ -41,3 +42,6 @@ creates or deletes AWS resources.
   (temporary session token: reload when it expires).
 - Region: `us-east-1`.
 - Infrastructure is in `infra/` (Terraform). See `infra/README.md`.
+- Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
+  (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
+  `terraform destroy` does not delete it).

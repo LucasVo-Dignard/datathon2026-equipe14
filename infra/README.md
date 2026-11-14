@@ -14,15 +14,28 @@ Terraform that creates:
 - **No security group open to the internet.** `0.0.0.0/0` (or any `/0`) is
   rejected by variable validation and a precondition.
 - **No credentials in Git.** `.env-aws`, `*.tfvars`, `*.pem` and
-  `terraform.tfstate` are gitignored. The state contains the generated private
-  key, so never commit it.
-- **No S3, RDS or EMR resources.** If you later add an S3 bucket (e.g. for
-  remote state), keep S3 Block Public Access enabled (the default).
+  `*.tfstate` are gitignored. The state contains the generated private key,
+  so it lives only in the private S3 bucket (see below), never in Git.
+- **Private S3 only.** The one bucket (Terraform state) has all four Block
+  Public Access settings on, versioning, encryption, and a policy that
+  denies non-HTTPS access. No RDS or EMR resources.
 - **Minimal resources.** One small instance. Stop it or destroy it when idle.
+
+## Remote state
+
+State is stored in `s3://datathon2026-equipe14-tfstate-779846826297/infra/terraform.tfstate`
+(configured in `backend.tf`), with S3-native locking so two people can't apply
+at once. Anyone with the team's AWS credentials can run Terraform from their
+own machine; there is no local state file to pass around.
+
+The bucket was created once with `./bootstrap-state-bucket.sh` (safe to
+re-run). It is not managed by Terraform and is **not** removed by
+`terraform destroy`. Delete it manually at the end of the datathon, after
+destroying everything else.
 
 ## Prerequisites
 
-- Terraform >= 1.5 (`winget install Hashicorp.Terraform`)
+- Terraform >= 1.10 (`winget install Hashicorp.Terraform`)
 - Optional: AWS CLI v2 (`winget install Amazon.AWSCLI`)
 
 ## Credentials
