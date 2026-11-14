@@ -162,6 +162,8 @@ locals {
     region   = data.aws_region.current.name
     registry = local.ecr_registry
     image    = local.app_image
+    # Same name as aws_db_instance.main in ../infra-db (that stack may not exist yet).
+    db_identifier = "${local.prefix}-db"
   })
 }
 

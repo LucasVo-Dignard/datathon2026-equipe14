@@ -61,7 +61,11 @@ DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm start 
 ```
 
 Never commit a real URL: it contains the password (RDS keeps it in Secrets Manager).
-For RDS, append `?sslmode=require`. Users and sessions are still in the JSON file
+On the EC2, nothing to set by hand: before each start, `chatbot-db-env` (in
+`infra/user_data.sh.tftpl`) builds `DATABASE_URL` for that environment's RDS from
+its endpoint and Secrets Manager, with `sslmode=verify-full` and the RDS root
+certificates shipped in the image. If the environment has no database yet, the
+app uses the JSON file. Users and sessions are still in the JSON file
 (login prototype). Once a SQL `users` table exists, add the foreign key in a new migration.
 All thresholds are prototype assumptions, for simulation only, not financial advice.
 

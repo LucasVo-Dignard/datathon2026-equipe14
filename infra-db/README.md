@@ -55,8 +55,10 @@ aws secretsmanager get-secret-value \
   --query SecretString --output text
 ```
 
-Don't copy it into files in the repo. The app should read it from Secrets
-Manager at runtime.
+Don't copy it into files in the repo. The web app reads it from Secrets
+Manager at runtime: `app-access.tf` lets the web server describe this DB and
+read this secret, and the server builds the app's `DATABASE_URL` before each
+start (see `../infra/README.md`, "Deploying the app").
 
 ## Connecting
 

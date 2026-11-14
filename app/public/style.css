@@ -148,6 +148,27 @@ h1, h2, h3 { margin: 0; }
 .data-view summary { cursor: pointer; color: var(--text-2); font-size: 0.85rem; padding: 4px 0; }
 .scroll { max-height: 240px; overflow-y: auto; }
 
+/* News */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button {
+  border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+  padding: 4px 12px; font-size: 0.8rem; color: var(--text-2); min-height: 30px;
+}
+.chips button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: #fff; }
+.news { list-style: none; margin: 0; padding: 0; }
+.news-item { padding: 12px 0; border-bottom: 1px solid var(--grid); }
+.news-item:first-child { padding-top: 0; }
+.news-item:last-child { border-bottom: 0; }
+.news-item h3 { font-size: 0.95rem; font-weight: 600; margin: 6px 0 4px; line-height: 1.35; }
+.news-item p { margin: 0 0 6px; color: var(--text-2); font-size: 0.9rem; line-height: 1.45; }
+.news-item .meta { color: var(--muted); font-size: 0.8rem; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag {
+  font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+  background: var(--page); border: 1px solid var(--border); color: var(--text);
+}
+.tag.sector { font-weight: 500; color: var(--text-2); background: none; }
+
 /* Tables */
 .table-wrap { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -216,6 +237,7 @@ h1, h2, h3 { margin: 0; }
 .profile p { margin: 0 0 8px; }
 .profile .lead { font-size: 1.05rem; }
 .profile .note { background: var(--accent-tint); border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 4px; }
+.persona-note { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .profile .primary, .profile .secondary { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--accent); }
 .profile .primary { background: var(--accent); color: #fff; }
 .profile .secondary { background: var(--panel); border-color: var(--border); }

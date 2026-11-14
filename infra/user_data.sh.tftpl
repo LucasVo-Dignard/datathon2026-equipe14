@@ -15,8 +15,46 @@ systemctl enable --now docker
 # uid 1000 = the "node" user inside the image.
 install -d -o 1000 -g 1000 -m 700 /var/lib/chatbot
 
-# Extra environment for the container (e.g. DATABASE_URL later). Not in Git.
+# Extra environment for the container, set by hand if needed. Not in Git.
 install -m 600 /dev/null /etc/chatbot.env
+
+# Before each start: build DATABASE_URL for this environment's RDS database
+# (${db_identifier}) from its endpoint and the master secret in Secrets Manager.
+# Written to /run (tmpfs, root only), never to disk or to the logs. If the
+# database doesn't exist yet, the file stays empty and the app uses its JSON
+# storage; any other error fails the start, and systemd retries.
+cat > /usr/local/bin/chatbot-db-env <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+OUT=/run/chatbot/db.env
+install -d -m 700 /run/chatbot
+install -m 600 /dev/null "$OUT"
+
+if ! DB="$(aws rds describe-db-instances --region ${region} --db-instance-identifier ${db_identifier} \
+    --query 'DBInstances[0].[Endpoint.Address,Endpoint.Port,DBName,MasterUsername,MasterUserSecret.SecretArn]' \
+    --output text 2>&1)"; then
+  if grep -q DBInstanceNotFound <<<"$DB"; then
+    echo "chatbot-db-env: no database ${db_identifier}, the app uses its JSON storage"
+    exit 0
+  fi
+  echo "chatbot-db-env: $DB" >&2
+  exit 1
+fi
+read -r HOST PORT NAME USER ARN <<<"$DB"
+
+# The secret goes through a pipe only (not argv, not disk).
+aws secretsmanager get-secret-value --region ${region} --secret-id "$ARN" --query SecretString --output text \
+  | python3 -c '
+import json, sys, urllib.parse as u
+host, port, name, user, out = sys.argv[1:]
+pw = json.load(sys.stdin)["password"]
+url = (f"postgres://{u.quote(user, safe=str())}:{u.quote(pw, safe=str())}@{host}:{port}/{name}"
+       "?sslmode=verify-full&sslrootcert=/srv/certs/rds-global-bundle.pem")
+open(out, "w").write(f"DATABASE_URL={url}\n")
+' "$HOST" "$PORT" "$NAME" "$USER" "$OUT"
+echo "chatbot-db-env: DATABASE_URL set for $NAME on $HOST"
+SCRIPT
+chmod 700 /usr/local/bin/chatbot-db-env
 
 cat > /etc/systemd/system/chatbot.service <<'UNIT'
 [Unit]
@@ -31,9 +69,10 @@ StartLimitIntervalSec=0
 Restart=always
 RestartSec=15
 ExecStartPre=-/usr/bin/docker rm -f chatbot
+ExecStartPre=/usr/local/bin/chatbot-db-env
 ExecStartPre=/bin/sh -c 'aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${registry}'
 ExecStartPre=/usr/bin/docker pull ${image}
-ExecStart=/usr/bin/docker run --rm --name chatbot -p 80:3000 -v /var/lib/chatbot:/data --env-file /etc/chatbot.env ${image}
+ExecStart=/usr/bin/docker run --rm --name chatbot -p 80:3000 -v /var/lib/chatbot:/data --env-file /etc/chatbot.env --env-file /run/chatbot/db.env ${image}
 ExecStop=/usr/bin/docker stop chatbot
 
 [Install]
