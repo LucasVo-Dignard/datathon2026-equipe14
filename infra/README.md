@@ -96,8 +96,14 @@ instance is **not** recreated, so the prototype data in `/var/lib/chatbot`
 
 - Roll back: rerun the script from an older commit, or set `app_image_tag` to
   an older SHA and apply (that one recreates the instance).
-- Extra environment for the container (e.g. `DATABASE_URL`) goes in
-  `/etc/chatbot.env` on the instance, never in Git.
+- Database: before each start, `/usr/local/bin/chatbot-db-env` looks up this
+  environment's RDS (`<prefix>-db`) and its master secret, and writes
+  `DATABASE_URL` (TLS, certificate and hostname verified) to `/run/chatbot/db.env`
+  (tmpfs, root only). No database yet: the app uses its JSON file. The
+  permissions come from `../infra-db/app-access.tf`, so apply `infra-db` first,
+  then restart the service (`./scripts/deploy-app.sh`).
+- Other environment for the container goes in `/etc/chatbot.env` on the
+  instance, never in Git.
 - Right after a fresh instance boots, the service retries every 15 s until an
   image exists in ECR, so the order of apply and first deploy doesn't matter.
 
