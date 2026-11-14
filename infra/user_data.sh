@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs once on first boot: installs nginx and serves a placeholder page.
+# Runs once on first boot: installs nginx and serves a white page saying "allo".
 set -euxo pipefail
 
 dnf update -y
@@ -8,8 +8,8 @@ dnf install -y nginx
 cat > /usr/share/nginx/html/index.html <<'HTML'
 <!doctype html>
 <html>
-  <head><title>datathon2026-equipe14</title></head>
-  <body><h1>datathon2026-equipe14 EC2 is up</h1></body>
+  <head><meta charset="utf-8"><title>allo</title></head>
+  <body style="background:#fff;margin:0"><p>allo</p></body>
 </html>
 HTML
 
