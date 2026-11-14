@@ -7,6 +7,7 @@
 //                le dernier élément est le message que l'utilisateur vient d'envoyer
 //   - username : l'utilisateur connecté
 //   - chatId   : l'identifiant de la conversation
+//   - portfolio: le portefeuille du client (voir portfolio.js : summary, holdings, history)
 // et doit retourner (ou résoudre) le texte de la réponse.
 // ---------------------------------------------------------------------------
 

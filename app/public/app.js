@@ -1,8 +1,10 @@
 'use strict';
+// Login, phone tabs, and the assistant panel (conversations + messages).
 
 const $ = (id) => document.getElementById(id);
 const DEFAULT_TITLE = 'Nouvelle conversation';
 const emptyEl = $('empty'); // kept as a reference: renderMessages detaches it
+const mobileQuery = window.matchMedia('(max-width: 900px)');
 
 const state = {
   chats: [],          // [{ id, title, updatedAt }]
@@ -36,30 +38,46 @@ async function showApp(username) {
   $('login-view').hidden = true;
   $('app-view').hidden = false;
   $('account-name').textContent = username;
+  setTab('portfolio');
+  window.Dashboard.load();
   state.chats = await api('GET', '/api/chats');
   if (state.chats.length) await openChat(state.chats[0].id);
   else newChat();
 }
 
-// ---------------------------------------------------------------------------
-// Sidebar (a slide-in drawer on phones)
-// ---------------------------------------------------------------------------
-
-const mobileQuery = window.matchMedia('(max-width: 768px)');
-
-function setSidebar(open) {
-  $('app-view').classList.toggle('sidebar-open', open);
-  $('menu').setAttribute('aria-expanded', String(open));
+// Phones show one pane at a time; desktop shows both side by side.
+function setTab(tab) {
+  $('app-view').dataset.tab = tab;
+  for (const b of document.querySelectorAll('.tabbar button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
+  }
+  if (tab === 'portfolio') window.Dashboard.redraw();
+  else scrollMessages();
 }
 
-// Don't pop the on-screen keyboard open on phones when switching chats.
+// Don't pop the on-screen keyboard open on phones.
 function focusInput() {
   if (!mobileQuery.matches) $('input').focus();
+}
+
+// ---------------------------------------------------------------------------
+// Conversation history (inside the assistant panel)
+// ---------------------------------------------------------------------------
+
+function setHistory(open) {
+  $('history').hidden = !open;
+  $('history-toggle').setAttribute('aria-expanded', String(open));
 }
 
 function renderChatList() {
   const list = $('chat-list');
   list.replaceChildren();
+  if (!state.chats.length) {
+    const p = document.createElement('p');
+    p.className = 'muted small history-empty';
+    p.textContent = 'Aucune conversation pour l’instant.';
+    list.append(p);
+  }
   for (const chat of state.chats) {
     const item = document.createElement('div');
     item.className = 'chat-item' + (chat.id === state.currentId ? ' active' : '');
@@ -74,12 +92,14 @@ function renderChatList() {
     rename.className = 'icon';
     rename.textContent = '✎';
     rename.title = 'Renommer';
+    rename.setAttribute('aria-label', `Renommer « ${chat.title} »`);
     rename.onclick = () => renameChat(chat);
 
     const del = document.createElement('button');
     del.className = 'icon';
     del.textContent = '🗑';
     del.title = 'Supprimer';
+    del.setAttribute('aria-label', `Supprimer « ${chat.title} »`);
     del.onclick = () => deleteChat(chat);
 
     item.append(title, rename, del);
@@ -94,7 +114,6 @@ function upsertSummary(summary) {
 
 function setTitle(title) {
   $('chat-title').textContent = title;
-  document.title = `${title} – Chatbot`;
 }
 
 function newChat() {
@@ -102,7 +121,7 @@ function newChat() {
   setTitle(DEFAULT_TITLE);
   renderMessages([]);
   renderChatList();
-  setSidebar(false);
+  setHistory(false);
   focusInput();
 }
 
@@ -112,7 +131,7 @@ async function openChat(id) {
   setTitle(chat.title);
   renderMessages(chat.messages);
   renderChatList();
-  setSidebar(false);
+  setHistory(false);
   focusInput();
 }
 
@@ -130,11 +149,11 @@ async function deleteChat(chat) {
   await api('DELETE', `/api/chats/${chat.id}`);
   state.chats = state.chats.filter((c) => c.id !== chat.id);
   if (chat.id === state.currentId) {
-    if (state.chats.length) await openChat(state.chats[0].id);
-    else newChat();
-  } else {
-    renderChatList();
+    state.currentId = null;
+    setTitle(DEFAULT_TITLE);
+    renderMessages([]);
   }
+  renderChatList();
 }
 
 // ---------------------------------------------------------------------------
@@ -151,19 +170,21 @@ function messageEl(role, content, pending = false) {
   return row;
 }
 
-function renderMessages(messages) {
+function scrollMessages() {
   const box = $('messages');
-  emptyEl.hidden = messages.length > 0;
-  box.replaceChildren(emptyEl);
-  for (const m of messages) box.append(messageEl(m.role, m.content));
   box.scrollTop = box.scrollHeight;
 }
 
-function appendMessage(el) {
+function renderMessages(messages) {
+  emptyEl.hidden = messages.length > 0;
+  $('messages').replaceChildren(emptyEl, ...messages.map((m) => messageEl(m.role, m.content)));
+  scrollMessages();
+}
+
+function appendMessage(node) {
   emptyEl.hidden = true;
-  const box = $('messages');
-  box.append(el);
-  box.scrollTop = box.scrollHeight;
+  $('messages').append(node);
+  scrollMessages();
 }
 
 async function send() {
@@ -175,10 +196,10 @@ async function send() {
   $('send').disabled = true;
   input.value = '';
   autosize();
+  setHistory(false);
 
-  const userEl = messageEl('user', content);
   const pendingEl = messageEl('assistant', 'L’agent réfléchit…', true);
-  appendMessage(userEl);
+  appendMessage(messageEl('user', content));
   appendMessage(pendingEl);
 
   try {
@@ -195,6 +216,7 @@ async function send() {
   } finally {
     state.sending = false;
     $('send').disabled = false;
+    scrollMessages();
     focusInput();
   }
 }
@@ -225,18 +247,19 @@ $('logout').addEventListener('click', async () => {
   await api('POST', '/api/logout').catch(() => {});
   state.chats = [];
   state.currentId = null;
-  setSidebar(false);
+  setHistory(false);
   showLogin();
 });
 
 $('new-chat').addEventListener('click', newChat);
-$('new-chat-mobile').addEventListener('click', newChat);
-$('menu').addEventListener('click', () => setSidebar(true));
-$('backdrop').addEventListener('click', () => setSidebar(false));
+$('history-toggle').addEventListener('click', () => setHistory($('history').hidden));
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') setSidebar(false);
+  if (e.key === 'Escape' && !$('history').hidden) setHistory(false);
 });
-mobileQuery.addEventListener('change', () => setSidebar(false));
+
+for (const b of document.querySelectorAll('.tabbar button')) {
+  b.addEventListener('click', () => setTab(b.dataset.tab));
+}
 
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();

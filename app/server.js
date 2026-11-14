@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { reply } = require('./bot');
+const { getPortfolio } = require('./portfolio');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -156,6 +157,10 @@ async function handleApi(req, res, pathname) {
 
   const user = requireUser(req);
 
+  if (pathname === '/api/portfolio' && method === 'GET') {
+    return sendJson(res, 200, getPortfolio(user));
+  }
+
   if (pathname === '/api/chats') {
     if (method === 'GET') {
       const chats = Object.values(db.chats)
@@ -213,6 +218,7 @@ async function handleApi(req, res, pathname) {
           messages: chat.messages.map(({ role, content }) => ({ role, content })),
           username: user,
           chatId: chat.id,
+          portfolio: getPortfolio(user),
         });
       } catch (err) {
         console.error('bot error:', err);
@@ -237,6 +243,7 @@ async function handleApi(req, res, pathname) {
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
 };
 
