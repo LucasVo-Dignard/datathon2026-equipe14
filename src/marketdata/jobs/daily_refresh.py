@@ -12,6 +12,10 @@ symbols. The exit code is 1 only when nothing succeeded at all (database or
 network down), so AWS Batch retries the job only in that case.
 
 Finnhub steps run only if ``FINNHUB_API_KEY`` is set.
+
+``REFRESH_ENABLED=false`` turns the job into a no-op: it logs and exits 0
+without connecting to the database or calling any provider. The AWS job
+definition sets it from the ``refresh_enabled`` Terraform variable.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import argparse
 import logging
 import os
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import lru_cache
@@ -141,11 +145,21 @@ def refresh(
     return report
 
 
+def refresh_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """On unless REFRESH_ENABLED is explicitly false/0/no/off."""
+    value = (os.environ if env is None else env).get("REFRESH_ENABLED", "true")
+    return value.strip().lower() not in {"false", "0", "no", "off"}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refresh tracked symbols in the database.")
     parser.add_argument("--symbols", nargs="+", help="override the tracked_symbols table")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    if not refresh_enabled():
+        log.info("REFRESH_ENABLED is off: doing nothing")
+        return 0
 
     with connect() as conn:
         conn.autocommit = True

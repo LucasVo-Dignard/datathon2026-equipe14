@@ -27,6 +27,8 @@ Terraform that creates:
 ## Remote state
 
 State is stored in `s3://datathon2026-equipe14-tfstate-779846826297/infra/terraform.tfstate`
+for prod, and `env:/<name>/infra/terraform.tfstate` for each developer's
+environment (see `../ENVIRONMENTS.md`). The same applies to the other stacks.
 (configured in `backend.tf`), with S3-native locking so two people can't apply
 at once. Anyone with the team's AWS credentials can run Terraform from their
 own machine; there is no local state file to pass around.

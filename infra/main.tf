@@ -27,13 +27,13 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags = { Name = "${var.project_name}-vpc" }
+  tags = { Name = "${local.prefix}-vpc" }
 }
 
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
-  tags = { Name = "${var.project_name}-igw" }
+  tags = { Name = "${local.prefix}-igw" }
 }
 
 resource "aws_subnet" "public" {
@@ -42,7 +42,7 @@ resource "aws_subnet" "public" {
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
-  tags = { Name = "${var.project_name}-public" }
+  tags = { Name = "${local.prefix}-public" }
 }
 
 resource "aws_route_table" "public" {
@@ -53,7 +53,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.main.id
   }
 
-  tags = { Name = "${var.project_name}-public-rt" }
+  tags = { Name = "${local.prefix}-public-rt" }
 }
 
 resource "aws_route_table_association" "public" {
@@ -66,13 +66,17 @@ resource "aws_route_table_association" "public" {
 # ---------------------------------------------------------------------------
 
 # Public IP of whoever runs terraform, so they can reach the instance.
+locals {
+  allow_my_ip = var.allow_my_ip != null ? var.allow_my_ip : !local.is_prod
+}
+
 data "http" "my_ip" {
-  count = var.allow_my_ip ? 1 : 0
+  count = local.allow_my_ip ? 1 : 0
   url   = "https://checkip.amazonaws.com"
 }
 
 locals {
-  my_cidr       = var.allow_my_ip ? ["${chomp(data.http.my_ip[0].response_body)}/32"] : []
+  my_cidr       = local.allow_my_ip ? ["${chomp(data.http.my_ip[0].response_body)}/32"] : []
   allowed_cidrs = distinct(concat(local.my_cidr, var.allowed_cidrs))
 
   ingress_ports = concat(var.web_ports, var.enable_ssh ? [22] : [])
@@ -85,11 +89,11 @@ locals {
 }
 
 resource "aws_security_group" "web" {
-  name        = "${var.project_name}-web"
+  name        = "${local.prefix}-web"
   description = "Inbound only from allowlisted IPs"
   vpc_id      = aws_vpc.main.id
 
-  tags = { Name = "${var.project_name}-web" }
+  tags = { Name = "${local.prefix}-web" }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allowed" {
@@ -126,13 +130,13 @@ resource "tls_private_key" "ssh" {
 }
 
 resource "aws_key_pair" "main" {
-  key_name   = "${var.project_name}-key"
+  key_name   = "${local.prefix}-key"
   public_key = tls_private_key.ssh.public_key_openssh
 }
 
 resource "local_sensitive_file" "private_key" {
   content         = tls_private_key.ssh.private_key_openssh
-  filename        = "${path.module}/${var.project_name}-key.pem"
+  filename        = "${path.module}/${local.prefix}-key.pem"
   file_permission = "0600"
 }
 
@@ -152,7 +156,7 @@ locals {
   # can't see that user_data changes, and would update it in place instead of
   # replacing the instance (and user_data only runs on first boot).
   ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com"
-  app_image    = "${local.ecr_registry}/${var.project_name}-app:${var.app_image_tag}"
+  app_image    = "${local.ecr_registry}/${local.prefix}-app:${var.app_image_tag}"
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     region   = data.aws_region.current.name
@@ -184,7 +188,7 @@ resource "aws_instance" "web" {
     encrypted   = true
   }
 
-  tags = { Name = "${var.project_name}-web" }
+  tags = { Name = "${local.prefix}-web" }
 
   depends_on = [aws_internet_gateway.main]
 }
@@ -200,7 +204,7 @@ resource "aws_ec2_instance_state" "web" {
 resource "aws_eip" "web" {
   domain = "vpc"
 
-  tags = { Name = "${var.project_name}-web" }
+  tags = { Name = "${local.prefix}-web" }
 
   depends_on = [aws_internet_gateway.main]
 }

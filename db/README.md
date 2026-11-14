@@ -43,7 +43,12 @@ complains about paths. The local password is a throwaway (`localdev`, or
 python db/migrate.py info       # show applied / pending, change nothing
 python db/migrate.py            # apply pending migrations (same as `migrate`)
 python db/migrate.py validate   # check applied files were not edited
+python db/migrate.py --env prod info   # another environment than $TF_WORKSPACE
 ```
+
+The target environment comes from `--env` or `TF_WORKSPACE` (in `.env-dev`,
+see `../ENVIRONMENTS.md`); there is no default, so prod is only migrated when
+named. Migrate your own environment first, then prod.
 
 Use the repo's `.venv` (`pip install -e ".[ops]"` installs boto3). The script
 reads the AWS credentials from `.env-aws` itself. When you add a migration:
@@ -54,8 +59,8 @@ reads the AWS credentials from `.env-aws` itself. When you add a migration:
 4. Commit the migration.
 
 How it works: the database is private and only the web server can reach it.
-The script uploads `flyway.toml` and `migrations/` to the private bucket
-`datathon2026-equipe14-migrations-<account>` (bundles expire after 7 days),
+The script uploads `flyway.toml` and `migrations/` to the environment's private bucket
+`datathon2026-equipe14[-<env>]-migrations-<account>` (bundles expire after 7 days),
 then uses AWS Systems Manager to run Flyway in Docker on the web server.
 The server reads the DB password from Secrets Manager; it is never printed or
 written to disk. No SSH and no open port are needed. It needs

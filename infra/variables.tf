@@ -47,9 +47,9 @@ variable "web_ports" {
 }
 
 variable "allow_my_ip" {
-  description = "Also allow the public IP of the machine running terraform. Off by default: our machines are inside allowed_cidrs, and a per-machine IP would make each teammate's apply different."
+  description = "Also allow the public IP of the machine running terraform. Default: off in prod (a per-machine IP would make each teammate's apply different), on in dev environments (one person applies each)."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "allowed_cidrs" {

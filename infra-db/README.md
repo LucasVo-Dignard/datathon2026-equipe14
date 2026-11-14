@@ -66,7 +66,7 @@ an SSH tunnel: set `enable_ssh = true` in `../infra/terraform.tfvars`, apply
 `../infra`, then:
 
 ```bash
-ssh -i ../infra/datathon2026-equipe14-key.pem -N \
+ssh -i ../infra/datathon2026-equipe14-<env>-key.pem -N \
   -L 5432:"$(terraform output -raw endpoint)":5432 \
   ec2-user@"$(terraform -chdir=../infra output -raw public_ip)"
 # then connect to localhost:5432
@@ -76,7 +76,8 @@ Turn SSH off again when you are done.
 
 ## Stopping and cleaning up
 
-- Pause: `aws rds stop-db-instance --db-instance-identifier datathon2026-equipe14-db`.
+- Pause: `aws rds stop-db-instance --db-instance-identifier datathon2026-equipe14-<env>-db`
+  (prod: `datathon2026-equipe14-db`).
   Storage is still billed, and AWS starts the instance again automatically
   after 7 days.
 - Remove everything: `terraform destroy`. There is **no final snapshot**

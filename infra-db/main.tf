@@ -5,13 +5,13 @@
 data "aws_vpc" "main" {
   filter {
     name   = "tag:Name"
-    values = ["${var.project_name}-vpc"]
+    values = ["${local.prefix}-vpc"]
   }
 }
 
 data "aws_security_group" "web" {
   vpc_id = data.aws_vpc.main.id
-  name   = "${var.project_name}-web"
+  name   = "${local.prefix}-web"
 }
 
 data "aws_availability_zones" "available" {
@@ -40,14 +40,14 @@ resource "aws_subnet" "db" {
   availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = false
 
-  tags = { Name = "${var.project_name}-db-private-${count.index}" }
+  tags = { Name = "${local.prefix}-db-private-${count.index}" }
 }
 
 resource "aws_db_subnet_group" "main" {
-  name       = "${var.project_name}-db"
+  name       = "${local.prefix}-db"
   subnet_ids = aws_subnet.db[*].id
 
-  tags = { Name = "${var.project_name}-db" }
+  tags = { Name = "${local.prefix}-db" }
 }
 
 # ---------------------------------------------------------------------------
@@ -56,11 +56,11 @@ resource "aws_db_subnet_group" "main" {
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "db" {
-  name        = "${var.project_name}-db"
+  name        = "${local.prefix}-db"
   description = "Database: inbound only from the web server security group"
   vpc_id      = data.aws_vpc.main.id
 
-  tags = { Name = "${var.project_name}-db" }
+  tags = { Name = "${local.prefix}-db" }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "from_web" {
@@ -77,7 +77,7 @@ resource "aws_vpc_security_group_ingress_rule" "from_web" {
 # ---------------------------------------------------------------------------
 
 resource "aws_db_instance" "main" {
-  identifier     = "${var.project_name}-db"
+  identifier     = "${local.prefix}-db"
   engine         = var.engine
   engine_version = local.engine_version
   instance_class = var.instance_class
@@ -113,5 +113,5 @@ resource "aws_db_instance" "main" {
   performance_insights_enabled = false
   monitoring_interval          = 0
 
-  tags = { Name = "${var.project_name}-db" }
+  tags = { Name = "${local.prefix}-db" }
 }

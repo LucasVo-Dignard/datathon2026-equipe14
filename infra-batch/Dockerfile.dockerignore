@@ -1,0 +1,8 @@
+# Used instead of the root .dockerignore when building infra-batch/Dockerfile.
+# Allowlist: only the Python package goes into the image. Everything else, in
+# particular .env-aws, *.pem keys and Terraform state, stays out.
+*
+!pyproject.toml
+!src/
+src/**/__pycache__
+src/*.egg-info

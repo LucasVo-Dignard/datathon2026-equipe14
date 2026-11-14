@@ -20,7 +20,8 @@ seems to require it. If a request conflicts with them, stop and ask.
      network range, plus `/32` addresses for individual machines when needed.
      Any range narrower than `/0` is acceptable if the team asked for it.
    - Databases (`infra-db/`) have no CIDR rules at all: they accept traffic
-     only from the web server's security group.
+     only from the web server's security group and the daily batch job's
+     security group (rule owned by `infra-batch/`).
    - Outbound `0.0.0.0/0` is fine, since it doesn't allow anything in.
 3. **NE CRÉEZ PAS d'instance RDS ni de cluster EMR avec l'accès public activé.**
    - `publicly_accessible = false` for RDS. Keep EMR in private subnets with
@@ -50,9 +51,16 @@ creates or deletes AWS resources.
 - Load credentials in Git Bash: `set -a; source .env-aws; set +a`
   (temporary session token: reload when it expires).
 - Region: `us-east-1`.
-- Infrastructure is Terraform, in two stacks with separate states:
-  `infra/` (VPC, EC2 web server) and `infra-db/` (private RDS). See each
-  folder's README. Apply `infra/` first and destroy `infra-db/` first.
+- Infrastructure is Terraform, in three stacks with separate states:
+  `infra/` (VPC, EC2 web server), `infra-db/` (private RDS) and
+  `infra-batch/` (daily refresh job on AWS Batch Fargate). See each folder's
+  README. Apply in that order; destroy in reverse (`infra-batch/` first).
+- Environments (see `ENVIRONMENTS.md`): prod is the `default` Terraform
+  workspace; each developer has their own (`lucas`, `andre`, `youcef`), with
+  its own VPC, EC2, RDS and Batch job, selected by `TF_WORKSPACE` in
+  `.env-dev`. Work in a dev environment by default. Prod needs
+  `-var confirm_prod=true` (Terraform), `--env prod` (`db/migrate.py`) or
+  `TF_WORKSPACE=default` (scripts): only touch it when asked.
 - Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
   (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
   `terraform destroy` does not delete it).
@@ -61,6 +69,10 @@ creates or deletes AWS resources.
 
 - RDS PostgreSQL 17 (`infra-db/`). Data is loaded on demand: check the DB
   first, call a fetcher (`src/marketdata`) only if data is missing or stale.
+  Exception: symbols in `tracked_symbols` are refreshed every weekday by the
+  batch job (`src/marketdata/jobs/daily_refresh.py`, `infra-batch/`), so
+  changes can be detected for notifications. Keep that list small. Scheduled
+  work does not run on the EC2 web server.
 - Schema changes go only through Flyway migrations in `db/migrations/`
   (`V<n>__<description>.sql`). Never edit a migration that has been applied;
   add a new one. See `db/README.md`.

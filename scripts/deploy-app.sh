@@ -1,15 +1,24 @@
 #!/bin/bash
 # Build the app image, push it to ECR and restart it on the web server.
 #
-# Usage (from the repo root, with AWS credentials loaded):
-#   set -a; source .env-aws; set +a
-#   ./scripts/deploy-app.sh
+# Usage (from the repo root, with AWS credentials and your environment loaded):
+#   set -a; source .env-aws; source .env-dev; set +a
+#   ./scripts/deploy-app.sh                         # your environment
+#   TF_WORKSPACE=default ./scripts/deploy-app.sh    # prod
 #
 # Needs Docker with buildx, and ../infra applied (ECR repo + web server).
 # The server is x86_64 (t3.micro), so the image is built for linux/amd64.
 # No SSH: the restart goes through AWS Systems Manager (SSM).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# The terraform outputs below come from the TF_WORKSPACE environment.
+if [ -z "${TF_WORKSPACE:-}" ]; then
+  echo "Set TF_WORKSPACE (source .env-dev), or TF_WORKSPACE=default for prod." >&2
+  exit 1
+fi
+ENV_NAME="$TF_WORKSPACE"; [ "$ENV_NAME" = default ] && ENV_NAME=prod
+echo "==> Environment: $ENV_NAME"
 
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 REPO_URL="$(terraform -chdir=infra output -raw ecr_repository_url)"

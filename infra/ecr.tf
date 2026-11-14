@@ -6,7 +6,7 @@
 # ---------------------------------------------------------------------------
 
 resource "aws_ecr_repository" "app" {
-  name                 = "${var.project_name}-app"
+  name                 = "${local.prefix}-app"
   image_tag_mutability = "MUTABLE" # "latest" is moved on every deploy; git-SHA tags are kept too
   force_delete         = true      # let `terraform destroy` remove the repo even if it holds images
 

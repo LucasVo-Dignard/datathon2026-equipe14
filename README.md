@@ -1,4 +1,8 @@
 # datathon2026-equipe14
+
+Each developer has their own AWS environment (EC2, RDS, Batch), separate from
+prod: see [ENVIRONMENTS.md](ENVIRONMENTS.md).
+
 ## `marketdata` package (Python)
 
 Fetchers for Yahoo Finance and Finnhub that return provider-independent models
