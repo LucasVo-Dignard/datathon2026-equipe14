@@ -36,9 +36,21 @@ async function showApp(username) {
   $('login-view').hidden = true;
   $('app-view').hidden = false;
   $('account-name').textContent = username;
-  state.chats = await api('GET', '/api/chats');
+  const [chats, hasProfile] = await Promise.all([api('GET', '/api/chats'), Profile.init()]);
+  state.chats = chats;
   if (state.chats.length) await openChat(state.chats[0].id);
   else newChat();
+  if (!hasProfile) showProfile(); // first visit: guide the user through the questionnaire
+}
+
+function showProfile() {
+  $('chat-view').hidden = true;
+  Profile.open();
+}
+
+function showChat() {
+  Profile.close();
+  $('chat-view').hidden = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +98,7 @@ function setTitle(title) {
 }
 
 function newChat() {
+  showChat();
   state.currentId = null;
   setTitle(DEFAULT_TITLE);
   renderMessages([]);
@@ -95,6 +108,7 @@ function newChat() {
 
 async function openChat(id) {
   const chat = await api('GET', `/api/chats/${id}`);
+  showChat();
   state.currentId = chat.id;
   setTitle(chat.title);
   renderMessages(chat.messages);
@@ -215,6 +229,11 @@ $('logout').addEventListener('click', async () => {
 });
 
 $('new-chat').addEventListener('click', newChat);
+$('open-profile').addEventListener('click', showProfile);
+window.addEventListener('profile:done', () => {
+  showChat();
+  $('input').focus();
+});
 
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();

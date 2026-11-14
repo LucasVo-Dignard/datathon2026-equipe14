@@ -22,6 +22,10 @@
   <!-- App -->
   <div id="app-view" class="app" hidden>
     <aside class="sidebar">
+      <button id="open-profile" class="profile-link">
+        <span>Mon profil investisseur</span>
+        <span id="profile-badge" class="badge todo">À compléter</span>
+      </button>
       <button id="new-chat" class="new-chat">+ Nouvelle conversation</button>
       <nav id="chat-list" class="chat-list" aria-label="Conversations"></nav>
       <div class="account">
@@ -30,7 +34,11 @@
       </div>
     </aside>
 
-    <section class="chat">
+    <section id="profile-view" class="profile" hidden>
+      <div id="profile-body" class="profile-body"></div>
+    </section>
+
+    <section id="chat-view" class="chat">
       <header class="chat-header">
         <h2 id="chat-title">Nouvelle conversation</h2>
       </header>
@@ -46,6 +54,7 @@
     </section>
   </div>
 
+  <script src="/profile-ui.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
