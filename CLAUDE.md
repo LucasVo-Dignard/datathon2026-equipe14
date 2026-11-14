@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## The project
+
+This project is for a hackathon. We are using AWS to make a tool that users from Banque Nationale Courtage Direct can use. The primary goal is to give people with limited time or knowledge **information**. This information can be reports (weekly, monthly, yearly), notifications about news or fundamentals or changes and more.
+
 ## AWS security rules (mandatory)
 
 These rules come from the datathon organizers. Never break them, even if a task
