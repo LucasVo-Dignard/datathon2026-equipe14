@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chatbot – équipe 14</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Login -->
+  <main id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h1>Chatbot</h1>
+      <p class="muted">Prototype – connectez-vous avec un nom d'utilisateur.<br>Le compte est créé automatiquement.</p>
+      <input id="login-username" name="username" placeholder="Nom d'utilisateur" autocomplete="username"
+             maxlength="32" required autofocus>
+      <button type="submit">Se connecter</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app-view" class="app" hidden>
+    <aside class="sidebar">
+      <button id="new-chat" class="new-chat">+ Nouvelle conversation</button>
+      <nav id="chat-list" class="chat-list" aria-label="Conversations"></nav>
+      <div class="account">
+        <span id="account-name" class="account-name"></span>
+        <button id="logout" class="link">Déconnexion</button>
+      </div>
+    </aside>
+
+    <section class="chat">
+      <header class="chat-header">
+        <h2 id="chat-title">Nouvelle conversation</h2>
+      </header>
+      <div id="messages" class="messages">
+        <div id="empty" class="empty">
+          <h2>Comment puis-je vous aider ?</h2>
+        </div>
+      </div>
+      <form id="composer" class="composer">
+        <textarea id="input" rows="1" maxlength="4000" placeholder="Écrivez un message…  (Maj+Entrée pour une nouvelle ligne)"></textarea>
+        <button id="send" type="submit" aria-label="Envoyer">➤</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
