@@ -5,3 +5,5 @@
 !*.tfvars.example
 *.pem
 crash.log
+tfplan
+*.tfplan

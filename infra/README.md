@@ -6,7 +6,8 @@ Terraform that creates:
 - a security group that allows inbound traffic **only from an IP allowlist**:
   your own IP (detected automatically) plus anything in `allowed_cidrs`
 - a `t3.micro` Amazon Linux 2023 instance with an 8 GiB encrypted disk,
-  IMDSv2 enforced, running nginx on port 80
+  IMDSv2 enforced, running the chatbot (`../app`, Node.js) on port 80
+- an Elastic IP, so the public IP never changes
 - a generated SSH key (SSH stays closed unless `enable_ssh = true`)
 
 ## Security rules this follows
@@ -61,11 +62,18 @@ terraform apply
 terraform output url
 ```
 
-nginx needs about a minute after boot to come up. Only the allowlisted IPs can
+The chatbot needs a minute or two after boot to come up. Only the allowlisted IPs can
 open the URL. If your IP changes (new network), run `terraform apply` again.
 
 ## Stopping and cleaning up
 
 - Pause: set `instance_running = false` in `terraform.tfvars`, then
-  `terraform apply`. The disk is kept; the public IP changes on restart.
+  `terraform apply`. The disk and the Elastic IP are kept. The Elastic IP
+  is still billed (about $0.005/h) while the instance is stopped.
 - Remove everything: `terraform destroy`.
+
+## Updating the chatbot
+
+The app in `../app` is embedded in the instance's `user_data`. Any change to
+it makes `terraform apply` **recreate the instance**. The public IP stays the
+same (Elastic IP), but the chat data (`/var/lib/chatbot/db.json`) is reset. Fine for a prototype.

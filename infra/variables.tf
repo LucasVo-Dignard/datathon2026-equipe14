@@ -41,7 +41,7 @@ variable "public_subnet_cidr" {
 }
 
 variable "web_ports" {
-  description = "TCP ports reachable from allowed_cidrs. nginx only serves HTTP, so 80 by default."
+  description = "TCP ports reachable from allowed_cidrs. The chatbot only serves HTTP, so 80 by default."
   type        = list(number)
   default     = [80]
 }
