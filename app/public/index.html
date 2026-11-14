@@ -34,6 +34,10 @@
         <button data-tab="portfolio" aria-pressed="true">Portefeuille</button>
         <button data-tab="profile" aria-pressed="false">Mon profil <span class="badge todo" data-profile-badge>À compléter</span></button>
       </nav>
+      <form id="stock-search" class="stock-search" role="search">
+        <input id="stock-query" type="search" placeholder="Rechercher un symbole (ex. RY)" aria-label="Symbole boursier"
+               maxlength="15" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
+      </form>
       <div class="account">
         <span id="account-name" class="account-name"></span>
         <button id="logout" class="link">Déconnexion</button>
@@ -169,8 +173,26 @@
     </nav>
   </div>
 
+  <!-- Stock quick view -->
+  <dialog id="stock-modal" class="modal" aria-labelledby="stock-symbol">
+    <header class="modal-head">
+      <div>
+        <h2 id="stock-symbol"></h2>
+        <p id="stock-name" class="muted small"></p>
+      </div>
+      <button id="stock-close" class="icon-btn" aria-label="Fermer" title="Fermer">✕</button>
+    </header>
+    <p id="stock-error" class="error" role="alert"></p>
+    <div id="stock-body" class="modal-body">
+      <span id="stock-price" class="tile-value"></span>
+      <span id="stock-delta" class="delta"></span>
+      <dl id="stock-meta" class="prefs"></dl>
+    </div>
+  </dialog>
+
   <script src="/dashboard.js"></script>
   <script src="/profile-ui.js"></script>
+  <script src="/stock-search.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

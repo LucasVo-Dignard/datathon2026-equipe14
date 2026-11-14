@@ -61,7 +61,9 @@
     const rows = holdings.map((h) => {
       const tr = el('tr');
       const name = el('td');
-      name.append(el('span', { class: 'symbol' }, h.symbol), el('span', { class: 'name', title: h.name }, h.name));
+      const symbol = el('button', { type: 'button', class: 'symbol', title: `Voir ${h.symbol}` }, h.symbol);
+      symbol.addEventListener('click', () => window.StockModal.open(h.symbol));
+      name.append(symbol, el('span', { class: 'name', title: h.name }, h.name));
       const day = el('td', { class: 'num opt-sm' });
       const dayDelta = el('span');
       setDelta(dayDelta, h.dayChange, h.dayChangePct);

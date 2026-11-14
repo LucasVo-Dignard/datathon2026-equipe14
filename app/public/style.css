@@ -56,10 +56,32 @@ h1, h2, h3 { margin: 0; }
   padding: max(10px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 10px max(20px, env(safe-area-inset-left));
   background: var(--panel); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; font-size: 1.05rem; }
+.brand { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
 .account { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .account-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link { border: 0; background: none; color: var(--text-2); text-decoration: underline; padding: 4px; }
+
+/* -------------------------------------------------------- Stock search */
+.stock-search { flex: 0 1 280px; min-width: 0; }
+.stock-search input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; font-size: 0.9rem; background: var(--page);
+}
+.stock-search input:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+
+/* Padding lives on the children so a click on the dialog itself means the backdrop. */
+.modal {
+  width: min(380px, calc(100% - 32px)); padding: 0; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel); color: var(--text); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.modal::backdrop { background: rgba(11, 11, 11, 0.35); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 12px 0 20px; }
+.modal-head h2 { font-size: 1.25rem; }
+.modal-head .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.modal-head p { margin: 4px 0 0; }
+.modal > .error { padding: 12px 20px 20px; }
+.modal-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 20px 20px; }
+.modal-body .prefs { grid-template-columns: 80px 1fr; margin-top: 16px; font-size: 0.9rem; }
 
 .workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
 .tabbar { display: none; }
@@ -154,6 +176,11 @@ h1, h2, h3 { margin: 0; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table .symbol { display: block; font-weight: 600; }
+.table button.symbol {
+  border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: inherit;
+  cursor: pointer; text-align: left;
+}
+.table button.symbol:hover { text-decoration: underline; }
 .table .name { display: block; color: var(--text-2); font-size: 0.8rem; }
 .table .block { display: block; }
 
@@ -336,12 +363,14 @@ h1, h2, h3 { margin: 0; }
   .table .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
   .table th, .table td { padding-left: 6px; padding-right: 6px; }
 
-  .composer textarea, .login-card input { font-size: 16px; } /* no iOS zoom on focus */
+  .composer textarea, .login-card input, .stock-search input { font-size: 16px; } /* no iOS zoom on focus */
+  .stock-search { flex: 1 1 auto; }
   .composer textarea { max-height: 30dvh; }
 }
 
 @media (max-width: 480px) {
   .table .opt-sm { display: none; }
+  .topbar .brand { display: none; }
 }
 
 @media (hover: none) {

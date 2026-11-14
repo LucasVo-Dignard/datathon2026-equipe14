@@ -8,6 +8,12 @@ a prototype), conversations per user, data in a JSON file.
   It receives the user's investor `profile` (or `null`).
 - `profile.js`: investor profile. Guided questionnaire, risk scoring, matching with the
   case personas (Amira, Mateo, Robert), tensions and guardrails for the agents.
+- `stocks.js`: quick view for the ticker search bar (`GET /api/stocks/:symbol`): name,
+  exchange, currency, last close and day change. With `DATABASE_URL`, it reads
+  `company_profiles` / `price_bars`. When the symbol is missing or older than an hour,
+  it first loads it from Yahoo with `src/marketdata` and saves it: profile, metrics,
+  price target, rating actions, and a year of daily prices on the first load
+  (the last week afterwards). Without a database, it asks Yahoo and saves nothing.
 - `public/`: interface (HTML/CSS/JS). `profile-ui.js` is the questionnaire and result page.
 
 Run locally:

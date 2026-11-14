@@ -10,6 +10,7 @@ const { reply } = require('./bot');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { getPortfolio } = require('./portfolio');
+const { createStockLookup, normalizeSymbol } = require('./stocks');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -45,6 +46,7 @@ function saveDb() {
 
 // Profils investisseurs : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
 const profiles = createProfileStore({ db, saveDb });
+const stocks = createStockLookup();
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -186,6 +188,27 @@ async function handleApi(req, res, pathname) {
     return sendJson(res, 200, getPortfolio(user));
   }
 
+  const stockMatch = pathname.match(/^\/api\/stocks\/([^/]+)$/);
+  if (stockMatch && method === 'GET') {
+    let raw;
+    try {
+      raw = decodeURIComponent(stockMatch[1]);
+    } catch {
+      raw = '';
+    }
+    const symbol = normalizeSymbol(raw);
+    if (!symbol) throw new HttpError(400, 'Symbole invalide');
+    let stock;
+    try {
+      stock = await stocks.lookup(symbol);
+    } catch (err) {
+      console.error(`stock lookup error (${symbol}):`, err.message);
+      throw new HttpError(502, 'Source de données indisponible, réessayez plus tard');
+    }
+    if (!stock) throw new HttpError(404, `Aucune donnée pour ${symbol}`);
+    return sendJson(res, 200, stock);
+  }
+
   if (pathname === '/api/chats') {
     if (method === 'GET') {
       const chats = Object.values(db.chats)
@@ -278,6 +301,7 @@ const STATIC = {
   '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
+  '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
