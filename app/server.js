@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 const { reply } = require('./bot');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
+const { getPortfolio } = require('./portfolio');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -181,6 +182,10 @@ async function handleApi(req, res, pathname) {
     }
   }
 
+  if (pathname === '/api/portfolio' && method === 'GET') {
+    return sendJson(res, 200, getPortfolio(user));
+  }
+
   if (pathname === '/api/chats') {
     if (method === 'GET') {
       const chats = Object.values(db.chats)
@@ -245,6 +250,7 @@ async function handleApi(req, res, pathname) {
           username: user,
           chatId: chat.id,
           profile: investorProfile,
+          portfolio: getPortfolio(user),
         });
       } catch (err) {
         console.error('bot error:', err);
@@ -269,8 +275,11 @@ async function handleApi(req, res, pathname) {
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
+  '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
+  '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
 
 function handleStatic(req, res, pathname) {

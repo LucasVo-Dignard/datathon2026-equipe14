@@ -11,6 +11,7 @@
 //                ou null si l'utilisateur n'a pas rempli le questionnaire.
 //                profileSummary(profile) en donne un résumé texte pour le prompt ;
 //                profile.guardrails et profile.tensions servent aux contrôles.
+//   - portfolio: le portefeuille du client (voir portfolio.js : summary, holdings, history)
 // et doit retourner (ou résoudre) le texte de la réponse.
 // ---------------------------------------------------------------------------
 

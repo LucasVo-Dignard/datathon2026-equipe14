@@ -1,8 +1,10 @@
 'use strict';
+// Login, phone tabs, and the assistant panel (conversations + messages).
 
 const $ = (id) => document.getElementById(id);
 const DEFAULT_TITLE = 'Nouvelle conversation';
 const emptyEl = $('empty'); // kept as a reference: renderMessages detaches it
+const mobileQuery = window.matchMedia('(max-width: 900px)');
 
 const state = {
   chats: [],          // [{ id, title, updatedAt }]
@@ -36,30 +38,50 @@ async function showApp(username) {
   $('login-view').hidden = true;
   $('app-view').hidden = false;
   $('account-name').textContent = username;
-  const [chats, hasProfile] = await Promise.all([api('GET', '/api/chats'), Profile.init()]);
+  window.Dashboard.load();
+  const [chats, hasProfile] = await Promise.all([api('GET', '/api/chats'), window.Profile.init()]);
+  // First visit: guide the user through the investor-profile questionnaire.
+  setTab(hasProfile ? 'portfolio' : 'profile');
   state.chats = chats;
   if (state.chats.length) await openChat(state.chats[0].id);
   else newChat();
-  if (!hasProfile) showProfile(); // first visit: guide the user through the questionnaire
 }
 
-function showProfile() {
-  $('chat-view').hidden = true;
-  Profile.open();
+// Tabs: portfolio | profile | assistant. On desktop the left pane shows the
+// dashboard or the profile and the assistant is always visible on the right;
+// phones show one pane at a time.
+function setTab(tab) {
+  $('app-view').dataset.tab = tab;
+  for (const b of document.querySelectorAll('button[data-tab]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
+  }
+  if (tab === 'portfolio') window.Dashboard.redraw();
+  else scrollMessages();
 }
 
-function showChat() {
-  Profile.close();
-  $('chat-view').hidden = false;
+// Don't pop the on-screen keyboard open on phones.
+function focusInput() {
+  if (!mobileQuery.matches) $('input').focus();
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar
+// Conversation history (inside the assistant panel)
 // ---------------------------------------------------------------------------
+
+function setHistory(open) {
+  $('history').hidden = !open;
+  $('history-toggle').setAttribute('aria-expanded', String(open));
+}
 
 function renderChatList() {
   const list = $('chat-list');
   list.replaceChildren();
+  if (!state.chats.length) {
+    const p = document.createElement('p');
+    p.className = 'muted small history-empty';
+    p.textContent = 'Aucune conversation pour l’instant.';
+    list.append(p);
+  }
   for (const chat of state.chats) {
     const item = document.createElement('div');
     item.className = 'chat-item' + (chat.id === state.currentId ? ' active' : '');
@@ -74,12 +96,14 @@ function renderChatList() {
     rename.className = 'icon';
     rename.textContent = '✎';
     rename.title = 'Renommer';
+    rename.setAttribute('aria-label', `Renommer « ${chat.title} »`);
     rename.onclick = () => renameChat(chat);
 
     const del = document.createElement('button');
     del.className = 'icon';
     del.textContent = '🗑';
     del.title = 'Supprimer';
+    del.setAttribute('aria-label', `Supprimer « ${chat.title} »`);
     del.onclick = () => deleteChat(chat);
 
     item.append(title, rename, del);
@@ -94,26 +118,25 @@ function upsertSummary(summary) {
 
 function setTitle(title) {
   $('chat-title').textContent = title;
-  document.title = `${title} – Chatbot`;
 }
 
 function newChat() {
-  showChat();
   state.currentId = null;
   setTitle(DEFAULT_TITLE);
   renderMessages([]);
   renderChatList();
-  $('input').focus();
+  setHistory(false);
+  focusInput();
 }
 
 async function openChat(id) {
   const chat = await api('GET', `/api/chats/${id}`);
-  showChat();
   state.currentId = chat.id;
   setTitle(chat.title);
   renderMessages(chat.messages);
   renderChatList();
-  $('input').focus();
+  setHistory(false);
+  focusInput();
 }
 
 async function renameChat(chat) {
@@ -130,11 +153,11 @@ async function deleteChat(chat) {
   await api('DELETE', `/api/chats/${chat.id}`);
   state.chats = state.chats.filter((c) => c.id !== chat.id);
   if (chat.id === state.currentId) {
-    if (state.chats.length) await openChat(state.chats[0].id);
-    else newChat();
-  } else {
-    renderChatList();
+    state.currentId = null;
+    setTitle(DEFAULT_TITLE);
+    renderMessages([]);
   }
+  renderChatList();
 }
 
 // ---------------------------------------------------------------------------
@@ -151,19 +174,21 @@ function messageEl(role, content, pending = false) {
   return row;
 }
 
-function renderMessages(messages) {
+function scrollMessages() {
   const box = $('messages');
-  emptyEl.hidden = messages.length > 0;
-  box.replaceChildren(emptyEl);
-  for (const m of messages) box.append(messageEl(m.role, m.content));
   box.scrollTop = box.scrollHeight;
 }
 
-function appendMessage(el) {
+function renderMessages(messages) {
+  emptyEl.hidden = messages.length > 0;
+  $('messages').replaceChildren(emptyEl, ...messages.map((m) => messageEl(m.role, m.content)));
+  scrollMessages();
+}
+
+function appendMessage(node) {
   emptyEl.hidden = true;
-  const box = $('messages');
-  box.append(el);
-  box.scrollTop = box.scrollHeight;
+  $('messages').append(node);
+  scrollMessages();
 }
 
 async function send() {
@@ -175,10 +200,10 @@ async function send() {
   $('send').disabled = true;
   input.value = '';
   autosize();
+  setHistory(false);
 
-  const userEl = messageEl('user', content);
   const pendingEl = messageEl('assistant', 'L’agent réfléchit…', true);
-  appendMessage(userEl);
+  appendMessage(messageEl('user', content));
   appendMessage(pendingEl);
 
   try {
@@ -195,7 +220,8 @@ async function send() {
   } finally {
     state.sending = false;
     $('send').disabled = false;
-    input.focus();
+    scrollMessages();
+    focusInput();
   }
 }
 
@@ -225,14 +251,24 @@ $('logout').addEventListener('click', async () => {
   await api('POST', '/api/logout').catch(() => {});
   state.chats = [];
   state.currentId = null;
+  setHistory(false);
   showLogin();
 });
 
 $('new-chat').addEventListener('click', newChat);
-$('open-profile').addEventListener('click', showProfile);
+$('history-toggle').addEventListener('click', () => setHistory($('history').hidden));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('history').hidden) setHistory(false);
+});
+
+for (const b of document.querySelectorAll('button[data-tab]')) {
+  b.addEventListener('click', () => setTab(b.dataset.tab));
+}
+
+// "Discuter avec l'assistant" on the profile result page.
 window.addEventListener('profile:done', () => {
-  showChat();
-  $('input').focus();
+  setTab(mobileQuery.matches ? 'assistant' : 'portfolio');
+  focusInput();
 });
 
 $('composer').addEventListener('submit', (e) => {
@@ -241,7 +277,8 @@ $('composer').addEventListener('submit', (e) => {
 });
 
 $('input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+  // On phones, Enter inserts a new line; the send button sends.
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !mobileQuery.matches) {
     e.preventDefault();
     send();
   }

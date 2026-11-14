@@ -143,15 +143,33 @@ resource "local_sensitive_file" "private_key" {
 locals {
   app_dir = "${path.module}/../app"
 
-  # The chatbot app, embedded in user_data (gzip + base64 to stay under 16 KB).
-  user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    files = [
-      for f in sort(fileset(local.app_dir, "**")) : {
-        path    = f
-        content = base64gzip(file("${local.app_dir}/${f}"))
-      } if !startswith(f, "data/") && !startswith(f, "node_modules/")
-    ]
-  })
+  app_files = [
+    for f in sort(fileset(local.app_dir, "**")) : {
+      path = f
+      # Light minification to save user_data space: drop indentation, and
+      # comment-only lines in JS/CSS. The files in Git keep their comments.
+      content = trimsuffix(
+        replace(
+          replace(
+            replace(file("${local.app_dir}/${f}"), "/(?m)^[ \\t]+/", ""),
+            "/(?m)^//.*\\n/", ""
+          ),
+          "/(?m)^/\\*.*\\*/\\n/", ""
+        ),
+        "\n"
+      )
+    } if !startswith(f, "data/") && !startswith(f, "node_modules/") && !endswith(f, ".md")
+  ]
+
+  # Heredoc delimiter for the embedded files; must not appear in any of them.
+  app_eof = "CHATBOT_FILE_EOF_7f3a"
+
+  # The app is embedded in user_data, and the whole script is gzipped so it
+  # stays under the 16 KB EC2 limit (cloud-init decompresses gzip natively).
+  user_data_gzip_b64 = base64gzip(templatefile("${path.module}/user_data.sh.tftpl", {
+    files = local.app_files
+    eof   = local.app_eof
+  }))
 }
 
 resource "aws_instance" "web" {
@@ -162,7 +180,7 @@ resource "aws_instance" "web" {
   key_name               = aws_key_pair.main.key_name
 
   # Any change in ../app recreates the instance (new public IP, chat data reset).
-  user_data                   = local.user_data
+  user_data_base64            = local.user_data_gzip_b64
   user_data_replace_on_change = true
 
   metadata_options {
@@ -179,8 +197,13 @@ resource "aws_instance" "web" {
 
   lifecycle {
     precondition {
-      condition     = length(local.user_data) <= 16384
-      error_message = "user_data exceeds the 16 KB EC2 limit: the app in ../app is too big to embed."
+      # 16 KB of decoded (gzipped) data = 21848 base64 characters.
+      condition     = length(local.user_data_gzip_b64) <= 21848
+      error_message = "Gzipped user_data exceeds the 16 KB EC2 limit: the app in ../app is too big to embed."
+    }
+    precondition {
+      condition     = alltrue([for f in local.app_files : !strcontains(f.content, local.app_eof)])
+      error_message = "An app file contains the heredoc delimiter used to embed it in user_data."
     }
   }
 

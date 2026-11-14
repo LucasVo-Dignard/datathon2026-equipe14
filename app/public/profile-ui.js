@@ -5,7 +5,6 @@
 (() => {
   const view = document.getElementById('profile-view');
   const body = document.getElementById('profile-body');
-  const badge = document.getElementById('profile-badge');
 
   const st = { questions: [], personas: [], profile: null, answers: {}, step: 0, persona: null };
 
@@ -39,8 +38,10 @@
   }
 
   function updateBadge() {
-    badge.textContent = st.profile ? st.profile.result.level.label : 'À compléter';
-    badge.className = `badge ${st.profile ? `lvl-${st.profile.result.level.id}` : 'todo'}`;
+    for (const badge of document.querySelectorAll('[data-profile-badge]')) {
+      badge.textContent = st.profile ? st.profile.result.level.label : 'À compléter';
+      badge.className = `badge ${st.profile ? `lvl-${st.profile.result.level.id}` : 'todo'}`;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -118,7 +119,7 @@
       q.help ? h('p', { class: 'muted' }, q.help) : null,
       input,
       error,
-      h('div', { class: 'nav' },
+      h('div', { class: 'p-nav' },
         h('button', { class: 'secondary', onclick: () => {
           if (st.step === 0) return st.profile ? renderResult() : renderIntro();
           st.step -= 1; renderStep();
@@ -162,7 +163,7 @@
 
     render(
       h('h1', {}, 'Votre profil investisseur'),
-      h('div', { class: 'card hero' },
+      h('div', { class: 'p-card p-hero' },
         h('span', { class: 'muted' }, 'Niveau de risque retenu'),
         h('div', { class: `level lvl-${r.level.id}` }, r.level.label),
         h('div', { class: 'gauge' }, ['Faible', 'Faible à modéré', 'Modéré', 'Modéré à élevé', 'Élevé'].map((t) => h('span', {}, t)),
@@ -172,11 +173,11 @@
 
       h('h2', {}, 'Comment ce niveau est calculé'),
       h('div', { class: 'grid3' },
-        h('div', { class: 'card' }, h('span', { class: 'muted' }, 'Tolérance au risque'), h('div', { class: 'big' }, `${r.tolerance.score}/100`),
+        h('div', { class: 'p-card' }, h('span', { class: 'muted' }, 'Tolérance au risque'), h('div', { class: 'big' }, `${r.tolerance.score}/100`),
           h('span', { class: 'small' }, 'Ce que vous êtes prêt à supporter')),
-        h('div', { class: 'card' }, h('span', { class: 'muted' }, 'Capacité à prendre du risque'), h('div', { class: 'big' }, `${r.capacity.score}/100`),
+        h('div', { class: 'p-card' }, h('span', { class: 'muted' }, 'Capacité à prendre du risque'), h('div', { class: 'big' }, `${r.capacity.score}/100`),
           h('span', { class: 'small' }, 'Ce que votre situation permet')),
-        h('div', { class: 'card' }, h('span', { class: 'muted' }, 'Score retenu'), h('div', { class: 'big' }, `${r.score}/100`),
+        h('div', { class: 'p-card' }, h('span', { class: 'muted' }, 'Score retenu'), h('div', { class: 'big' }, `${r.score}/100`),
           h('span', { class: 'small' }, 'Le plus bas des deux, plafonné par l’objectif'))),
       h('details', {}, h('summary', {}, 'Détail des réponses prises en compte'),
         h('h3', {}, 'Tolérance'), factorList(r.tolerance), h('h3', {}, 'Capacité'), factorList(r.capacity)),
@@ -201,14 +202,14 @@
         h('li', {}, `Au moins ${g.minDiversifiedAssets} actifs différents`)),
 
       h('h2', {}, 'Persona le plus proche'),
-      h('div', { class: 'card' },
+      h('div', { class: 'p-card' },
         h('strong', {}, `${persona.name}, ${persona.age} ans · ${persona.job}`),
         h('p', {}, persona.summary),
         h('p', { class: 'small muted' }, `Ce que ce persona teste : ${persona.tests}`),
         r.personaMatch.map((m) => h('div', { class: 'match' }, h('span', {}, m.name),
           h('div', { class: 'bar' }, h('div', { style: `width:${m.similarity}%` })), h('b', {}, `${m.similarity} %`)))),
 
-      h('div', { class: 'nav' },
+      h('div', { class: 'p-nav' },
         h('button', { class: 'secondary', onclick: () => start(st.profile.answers, null) }, 'Modifier mes réponses'),
         h('button', { class: 'secondary', onclick: renderIntro }, 'Recommencer'),
         h('button', { class: 'primary', onclick: () => window.dispatchEvent(new Event('profile:done')) }, 'Discuter avec l’assistant →')),
@@ -234,12 +235,12 @@
       st.personas = q.personas;
       st.profile = profile;
       updateBadge();
+      this.render();
       return Boolean(profile);
     },
-    open() {
-      view.hidden = false;
+    // Premier rendu ; ensuite l'écran courant est conservé quand on change d'onglet.
+    render() {
       if (st.profile) renderResult(); else renderIntro();
     },
-    close() { view.hidden = true; },
   };
 })();
