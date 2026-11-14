@@ -211,6 +211,9 @@
         h('li', {}, `Un même secteur : au plus ${g.maxSingleSectorShare} %`),
         h('li', {}, `Au moins ${g.minDiversifiedAssets} actifs différents`)),
 
+      h('h2', {}, 'Alertes de prix par courriel'),
+      window.Notifications ? window.Notifications.card() : null,
+
       h('h2', {}, 'Persona le plus proche'),
       h('div', { class: 'p-card' },
         h('strong', {}, `${persona.name}, ${persona.age} ans · ${persona.job}`),

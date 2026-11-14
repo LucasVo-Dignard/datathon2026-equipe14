@@ -70,6 +70,9 @@ resource "aws_batch_job_definition" "daily_refresh" {
       { name = "DB_SECRET_ARN", value = local.db_secret_arn },
       { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
       { name = "REFRESH_ENABLED", value = tostring(var.refresh_enabled) },
+      # Price-move alerts by email after the refresh (price_alerts.py).
+      { name = "NOTIFICATIONS_TOPIC_ARN", value = data.aws_sns_topic.price_alerts.arn },
+      { name = "APP_URL", value = "http://${data.aws_eip.web.public_ip}" },
     ]
 
     logConfiguration = {

@@ -13,6 +13,10 @@ network down), so AWS Batch retries the job only in that case.
 
 Finnhub steps run only if ``FINNHUB_API_KEY`` is set.
 
+When ``NOTIFICATIONS_TOPIC_ARN`` is set, price-move alerts are sent by email
+after the refresh (``price_alerts.py``). An alert failure is logged but does
+not fail the job: the data refresh already succeeded.
+
 ``REFRESH_ENABLED=false`` turns the job into a no-op: it logs and exits 0
 without connecting to the database or calling any provider. The AWS job
 definition sets it from the ``refresh_enabled`` Terraform variable.
@@ -35,6 +39,7 @@ import yfinance as yf
 from marketdata.db import connect
 from marketdata.db import repositories as repo
 from marketdata.http.rate_limiter import RateLimiter
+from marketdata.jobs import price_alerts
 from marketdata.providers.finnhub import (
     FinnhubClient,
     FinnhubEarningsFetcher,
@@ -151,6 +156,21 @@ def refresh_enabled(env: Mapping[str, str] | None = None) -> bool:
     return value.strip().lower() not in {"false", "0", "no", "off"}
 
 
+def send_price_alerts(conn: psycopg.Connection, env: Mapping[str, str] | None = None) -> None:
+    env = os.environ if env is None else env
+    topic_arn = env.get(price_alerts.TOPIC_ENV_VAR)
+    if not topic_arn:
+        log.info("%s not set: no price alerts", price_alerts.TOPIC_ENV_VAR)
+        return
+    try:
+        alerts = price_alerts.run(conn, price_alerts.sns_client(topic_arn), topic_arn,
+                                  date.today(), env.get("APP_URL", ""))
+        log.info("price alerts: %d user(s) notified, %d failure(s)",
+                 alerts.users_notified, len(alerts.failed_users))
+    except Exception as exc:  # alerts are best effort; the refresh already succeeded
+        log.warning("price alerts failed: %s", exc)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refresh tracked symbols in the database.")
     parser.add_argument("--symbols", nargs="+", help="override the tracked_symbols table")
@@ -169,6 +189,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         log.info("refreshing %d symbols", len(symbols))
         report = refresh(conn, symbols, default_steps(date.today()))
+        send_price_alerts(conn)
 
     log.info("finished: %d steps ok, %d failed", report.succeeded, report.failed)
     return 1 if report.nothing_succeeded else 0

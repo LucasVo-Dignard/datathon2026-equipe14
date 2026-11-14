@@ -164,6 +164,9 @@ locals {
     image    = local.app_image
     # Same name as aws_db_instance.main in ../infra-db (that stack may not exist yet).
     db_identifier = "${local.prefix}-db"
+    # Price alerts (sns.tf). Not secret: written to /etc/chatbot.env.
+    topic_arn = aws_sns_topic.price_alerts.arn
+    app_url   = "http://${aws_eip.web.public_ip}"
   })
 }
 
@@ -182,6 +185,9 @@ resource "aws_instance" "web" {
 
   metadata_options {
     http_tokens = "required" # IMDSv2 only
+    # 2 hops so the app container (Docker bridge network) can get the instance
+    # role's credentials for SNS; AWS's recommended setting for containers.
+    http_put_response_hop_limit = 2
   }
 
   root_block_device {

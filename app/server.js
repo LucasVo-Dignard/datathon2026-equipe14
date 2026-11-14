@@ -10,6 +10,7 @@ const { reply } = require('./bot');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { getPortfolio } = require('./portfolio');
+const { createNotificationsFromEnv, NotificationError } = require('./notifications');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -45,6 +46,9 @@ function saveDb() {
 
 // Profils investisseurs : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
 const profiles = createProfileStore({ db, saveDb });
+
+// Alertes de prix par courriel (SNS) : actives seulement avec Postgres et NOTIFICATIONS_TOPIC_ARN.
+const notifications = createNotificationsFromEnv({ pool: profiles.pool });
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -178,7 +182,36 @@ async function handleApi(req, res, pathname) {
         throw err;
       }
       const saved = await profiles.save(user, { answers, result: profile.buildProfile(answers), updatedAt: Date.now() });
+      await notifications.updateThreshold(user, saved.result); // le seuil d'alerte suit le niveau de risque
       return sendJson(res, 200, saved);
+    }
+  }
+
+  if (pathname === '/api/notifications' || pathname === '/api/notifications/test') {
+    try {
+      if (pathname === '/api/notifications/test') {
+        if (method !== 'POST') throw new HttpError(404, 'Route inconnue');
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.sendTest(user, { profile: p?.result }));
+      }
+      if (method === 'GET') {
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.get(user, { profile: p?.result }));
+      }
+      if (method === 'PUT') {
+        const { email } = await readJson(req);
+        const p = await profiles.get(user);
+        const symbols = getPortfolio(user).holdings.map((h) => h.ticker);
+        return sendJson(res, 200, await notifications.subscribe(user, email, { profile: p?.result, symbols }));
+      }
+      if (method === 'DELETE') {
+        await notifications.unsubscribe(user);
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.get(user, { profile: p?.result }));
+      }
+    } catch (err) {
+      if (err instanceof NotificationError) throw new HttpError(err.status, err.message);
+      throw err;
     }
   }
 
@@ -278,6 +311,7 @@ const STATIC = {
   '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
+  '/notifications-ui.js': ['notifications-ui.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
@@ -315,7 +349,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 profiles.init().then(
-  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils : ${profiles.kind})`)),
+  () => server.listen(PORT, () => console.log(
+    `chatbot listening on :${PORT} (profils : ${profiles.kind}, alertes : ${notifications.enabled ? 'actives' : 'désactivées'})`,
+  )),
   (err) => {
     console.error(`Impossible d'initialiser le stockage des profils (${profiles.kind}) :`, err.message || err.code || err);
     process.exit(1);

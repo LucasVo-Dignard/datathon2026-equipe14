@@ -8,15 +8,17 @@
 const CURRENCY = 'CAD';
 const CASH = 2450.0;
 
+// ticker: Yahoo Finance symbol, the one used in the database (price_bars,
+// tracked_symbols) and by the daily price alerts. TSX listings end in .TO.
 const HOLDINGS = [
-  { symbol: 'RY', sector: 'Finance', name: 'Banque Royale du Canada', quantity: 40, avgCost: 128.4, price: 171.25, prevClose: 169.9 },
-  { symbol: 'SHOP', sector: 'Technologie', name: 'Shopify', quantity: 25, avgCost: 92.1, price: 148.6, prevClose: 152.3 },
-  { symbol: 'TD', sector: 'Finance', name: 'Banque Toronto-Dominion', quantity: 60, avgCost: 84.7, price: 79.15, prevClose: 78.8 },
-  { symbol: 'ENB', sector: 'Énergie', name: 'Enbridge', quantity: 80, avgCost: 49.2, price: 58.4, prevClose: 58.65 },
-  { symbol: 'CNR', sector: 'Industrie', name: 'Canadien National', quantity: 20, avgCost: 158.0, price: 149.3, prevClose: 148.1 },
-  { symbol: 'AAPL', sector: 'Technologie', name: 'Apple', quantity: 15, avgCost: 182.5, price: 231.4, prevClose: 229.0 },
-  { symbol: 'MSFT', sector: 'Technologie', name: 'Microsoft', quantity: 10, avgCost: 335.0, price: 428.9, prevClose: 431.2 },
-  { symbol: 'XEQT', sector: 'FNB diversifié', name: 'iShares Core Equity ETF Portfolio', quantity: 120, avgCost: 28.6, price: 33.85, prevClose: 33.7 },
+  { symbol: 'RY', ticker: 'RY.TO', sector: 'Finance', name: 'Banque Royale du Canada', quantity: 40, avgCost: 128.4, price: 171.25, prevClose: 169.9 },
+  { symbol: 'SHOP', ticker: 'SHOP.TO', sector: 'Technologie', name: 'Shopify', quantity: 25, avgCost: 92.1, price: 148.6, prevClose: 152.3 },
+  { symbol: 'TD', ticker: 'TD.TO', sector: 'Finance', name: 'Banque Toronto-Dominion', quantity: 60, avgCost: 84.7, price: 79.15, prevClose: 78.8 },
+  { symbol: 'ENB', ticker: 'ENB.TO', sector: 'Énergie', name: 'Enbridge', quantity: 80, avgCost: 49.2, price: 58.4, prevClose: 58.65 },
+  { symbol: 'CNR', ticker: 'CNR.TO', sector: 'Industrie', name: 'Canadien National', quantity: 20, avgCost: 158.0, price: 149.3, prevClose: 148.1 },
+  { symbol: 'AAPL', ticker: 'AAPL', sector: 'Technologie', name: 'Apple', quantity: 15, avgCost: 182.5, price: 231.4, prevClose: 229.0 },
+  { symbol: 'MSFT', ticker: 'MSFT', sector: 'Technologie', name: 'Microsoft', quantity: 10, avgCost: 335.0, price: 428.9, prevClose: 431.2 },
+  { symbol: 'XEQT', ticker: 'XEQT.TO', sector: 'FNB diversifié', name: 'iShares Core Equity ETF Portfolio', quantity: 120, avgCost: 28.6, price: 33.85, prevClose: 33.7 },
 ];
 
 // Fictional news (prototype), tied to the client's stocks or their sectors.

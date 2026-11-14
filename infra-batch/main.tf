@@ -27,6 +27,16 @@ data "aws_db_instance" "main" {
   db_instance_identifier = "${local.prefix}-db"
 }
 
+# Price alerts: the topic and the web server's address come from ../infra
+# (looked up by name, like the database), so apply ../infra first.
+data "aws_sns_topic" "price_alerts" {
+  name = "${local.prefix}-price-alerts"
+}
+
+data "aws_eip" "web" {
+  tags = { Name = "${local.prefix}-web" }
+}
+
 data "aws_security_group" "db" {
   vpc_id = data.aws_vpc.main.id
   name   = "${local.prefix}-db"

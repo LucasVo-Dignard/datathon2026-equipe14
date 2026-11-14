@@ -58,6 +58,12 @@ data "aws_iam_policy_document" "job" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [local.db_secret_arn]
   }
+
+  statement {
+    sid       = "PublishPriceAlerts"
+    actions   = ["sns:Publish"]
+    resources = [data.aws_sns_topic.price_alerts.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "job" {

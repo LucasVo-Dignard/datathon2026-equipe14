@@ -32,3 +32,8 @@ output "ecr_repository_url" {
   description = "ECR repository of the app image (pushed by ../scripts/deploy-app.sh)."
   value       = aws_ecr_repository.app.repository_url
 }
+
+output "price_alerts_topic_arn" {
+  description = "SNS topic of the price-move email alerts (sns.tf)."
+  value       = aws_sns_topic.price_alerts.arn
+}
