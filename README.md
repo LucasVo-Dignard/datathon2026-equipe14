@@ -32,22 +32,7 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 
 ## Architecture et services AWS
 
-```
-                       Navigateur (réseau Polytechnique uniquement)
-                                         │ HTTP :80
-                     ┌───────────────────▼────────────────────┐
-                     │ EC2 t3.micro, conteneur Docker (ECR)   │──── Bedrock (Claude) + AgentCore
-                     │ app/ (Node.js, sans framework)         │──── SES (alertes, courriels de test)
-                     └───────┬──────────────────────┬─────────┘──── S3 privé (rapports)
-                             │ TLS vérifié          │ SSM (déploiements, migrations : pas de SSH)
-                     ┌───────▼────────┐    ┌────────┴──────────────────────────────────────┐
-                     │ RDS PostgreSQL │◄───│ AWS Batch Fargate (src/marketdata/jobs/)      │
-                     │ (privé)        │    │  - daily-refresh : cours, données, alertes    │
-                     └────────────────┘    │    (en semaine à 18 h, EventBridge Scheduler) │
-                                           │  - news-refresh : RSS + Yahoo + Comprehend    │
-                                           │    (toutes les 2 h)                           │
-                                           └───────────────────────────────────────────────┘
-```
+<img width="732" height="784" alt="arch" src="https://github.com/user-attachments/assets/f76af079-d596-4469-b4f9-68b26d995b90" />
 
 | Service | Rôle |
 | --- | --- |
