@@ -77,7 +77,7 @@ IAM), dans l'ordre :
 - Chaque rapport qui a utilisé Bigdata.com est versé dans la base de connaissances,
   pour que la même question soit moins coûteuse la fois suivante.
 
-**Dans Terraform** (`infra-agents/`, prod seulement pour l'instant) :
+**Dans Terraform** (`infra-agents/`) :
 - un bucket S3 privé et une base de connaissances Bedrock, avec sa source de données ;
 - la Gateway, avec trois cibles : la base de connaissances, la recherche web, et
   Bigdata.com, limitée à 6 requêtes par minute, avec une clé lue dans Secrets Manager
@@ -100,9 +100,9 @@ terraform -chdir=infra-agents apply
 
 La même commande `put-secret-value` sert à changer la clé.
 
-L'app les trouve par les variables `RESEARCH_*`. Sur l'EC2, `scripts/deploy-app.sh`
-retrouve ces ressources par leur nom et écrit les variables dans `/etc/chatbot.env` à
-chaque déploiement. Sans elles, l'assistant répond sans recherche.
+Au démarrage, l'app retrouve ces ressources par leur nom, pour l'environnement donné par
+`RESEARCH_ENV` (posée sur l'EC2 par `scripts/deploy-app.sh`). Sans agents, l'assistant
+répond sans recherche.
 
 ## Dépendances
 
@@ -189,36 +189,16 @@ for %f in (.env-aws .env-dev) do @for /f "usebackq eol=# tokens=1,* delims==" %a
 Les variables ne valent que pour le terminal ouvert : relance la commande dans chaque
 nouveau terminal, et après avoir renouvelé `.env-aws`.
 
-**Variables de l'app et des jobs.** Sur AWS, personne n'a à les poser à la main :
-
-| Où | Posées par | Variables |
-| --- | --- | --- |
-| Serveur web (EC2), `/etc/chatbot.env` | Terraform, au démarrage de l'instance | `AWS_REGION`, `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL` |
-| | `scripts/deploy-app.sh`, à chaque déploiement | `REPORTS_BUCKET`, `RESEARCH_*` |
-| | le script `chatbot-db-env`, à chaque démarrage de l'app | `DATABASE_URL`, construite depuis RDS et Secrets Manager |
-| Jobs Batch | Terraform (`infra-batch/batch.tf`) | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SECRET_ARN`, `AWS_DEFAULT_REGION`, `REFRESH_ENABLED`, `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL`, `REPORTS_BUCKET` |
-
-Toutes les autres gardent leur valeur par défaut. En local, rien n'est obligatoire : mets
-dans `.env-dev` seulement celles des fonctions que tu veux utiliser.
-
 | Variable | Sans elle | Pour |
 | --- | --- | --- |
 | `DATABASE_URL` | tout est stocké dans `app/data/db.json` | Utiliser PostgreSQL (par exemple celui de Docker, voir plus bas) |
-| `RESEARCH_HARNESS_ARN` | pas de recherche | L'agent de recherche AgentCore (voir [Agents](#agents)) |
-| `RESEARCH_REVIEWER_ARN` | pas de relecture | L'agent relecteur |
-| `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` | rapports de recherche non versés | Verser les rapports de recherche dans la base de connaissances |
-| `RESEARCH_GATEWAY_URL` | pas de vue de marché partagée | Récupérer la vue de marché Bigdata.com une fois par jour |
+| `RESEARCH_ENV` | pas de recherche | Utiliser les agents de recherche de cet environnement (voir [Agents](#agents)) |
 | `ALERTS_SENDER` | alertes désactivées | Envoyer les alertes de prix, depuis cette adresse vérifiée dans SES |
 
-Les valeurs `RESEARCH_*` de la prod sont dans les sorties de
-`terraform -chdir=infra-agents output`.
-
-Les principales variables Terraform (par environnement, sinon des valeurs par défaut
-adaptées à la prod ou au dev) sont :
+Les principales variables Terraform sont :
 - `allowed_cidrs`, par défaut `132.207.0.0/16` (Polytechnique) ;
 - `alerts_enabled` et `alerts_sender_email` ;
-- `refresh_enabled`, `schedule_enabled`, `reports_schedule_enabled` et `job_timeout_seconds` ;
-- `confirm_prod`, obligatoire pour toucher à la prod.
+- `refresh_enabled`, `schedule_enabled`, `reports_schedule_enabled` et `job_timeout_seconds`.
 
 Toutes les variables sont décrites dans le fichier `variables.tf` de chaque stack.
 
@@ -290,6 +270,3 @@ Secrets Manager (voir [Agents](#agents)), puis un nouveau `./scripts/deploy-app.
 | Code des jobs (`src/`) | `bash scripts/deploy-batch.sh` |
 | Nouvelle migration | `python db/migrate.py info`, puis `python db/migrate.py` |
 | Infrastructure | `terraform -chdir=<stack> plan`, puis `apply` |
-
-Prod : `TF_WORKSPACE=default`, avec `-var confirm_prod=true` pour Terraform et
-`--env prod` pour `migrate.py`. On n'y touche que sur demande, et toujours depuis `main`.
