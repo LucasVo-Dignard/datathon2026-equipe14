@@ -385,6 +385,16 @@ async function handleApi(req, res, pathname) {
         return null;
       });
 
+      // With "Accept: application/x-ndjson", the answer is streamed as JSON
+      // lines: {"type":"progress",...} for each step of the agents, then
+      // {"type":"done", messages, chat} (or {"type":"error", error}).
+      // Otherwise a single JSON response, as before.
+      const stream = (req.headers.accept || '').includes('application/x-ndjson');
+      const emit = (event) => { if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`); };
+      if (stream) {
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' });
+      }
+
       let answer;
       try {
         answer = await reply({
@@ -393,6 +403,7 @@ async function handleApi(req, res, pathname) {
           chatId: chat.id,
           profile: investorProfile,
           portfolio,
+          onProgress: stream ? (step) => emit({ type: 'progress', ...step }) : undefined,
         });
       } catch (err) {
         console.error('bot error:', err);
@@ -401,9 +412,21 @@ async function handleApi(req, res, pathname) {
 
       const botMsg = { role: 'assistant', content: String(answer), at: Date.now() };
       // Question and answer are saved together, once the answer is known.
-      const summary = await chats.append(user, chat.id, [userMsg, botMsg], { title });
-      if (!summary) throw chatNotFound(); // deleted while the agent was answering
-      return sendJson(res, 200, { messages: [userMsg, botMsg], chat: summary });
+      let summary;
+      try {
+        summary = await chats.append(user, chat.id, [userMsg, botMsg], { title });
+      } catch (err) {
+        if (!stream) throw err;
+        console.error('chat save error:', err);
+      }
+      if (!stream) {
+        if (!summary) throw chatNotFound(); // deleted while the agent was answering
+        return sendJson(res, 200, { messages: [userMsg, botMsg], chat: summary });
+      }
+      emit(summary
+        ? { type: 'done', messages: [userMsg, botMsg], chat: summary }
+        : { type: 'error', error: 'Conversation introuvable ou non enregistrée' });
+      return res.end();
     }
   }
 
@@ -477,12 +500,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-Promise.all([profiles.init(), portfolioStore.init(), chats.init()]).then(
+Promise.all([profiles.init(), chats.init(), portfolioStore.init()]).then(
   () => server.listen(PORT, () => console.log(
     `chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, conversations : ${chats.kind}, `
     + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
   (err) => {
-    console.error(`Impossible d'initialiser le stockage (${profiles.kind}) :`, err.message || err.code || err);
+    console.error('Impossible d\'initialiser le stockage (profils / conversations / portefeuilles) :', err.message || err.code || err);
     process.exit(1);
   },
 );

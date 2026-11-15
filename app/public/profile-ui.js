@@ -198,6 +198,7 @@
       h('h2', {}, 'Vos préférences'),
       h('dl', { class: 'prefs' },
         h('dt', {}, 'Secteurs'), h('dd', {}, chips(p.sectors)),
+        h('dt', {}, 'Régions'), h('dd', {}, chips(p.regions || [])),
         h('dt', {}, 'Entreprises'), h('dd', {}, p.style),
         h('dt', {}, 'Diversification'), h('dd', {}, p.diversification),
         h('dt', {}, 'Cryptoactifs'), h('dd', {}, p.crypto),

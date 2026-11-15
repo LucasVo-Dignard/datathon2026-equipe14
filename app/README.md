@@ -133,7 +133,9 @@ The Rapports tab simulates the report the client would receive: Quotidien,
 Hebdomadaire, Mensuel or Annuel. `reports.js` builds a data sheet for the period
 with **percentages and dates only** (no amounts, prices or quantities, so the
 report can't quote any): performance over the period from the portfolio history,
-high and low, day change, gain since purchase, cash share, each holding's weight,
+high and low, gain since purchase, cash share, each holding's weight and its own
+price move over the period (`stocks.changeSince`: stored bars, else Yahoo) with
+its contribution; the last session only for a daily report. Also
 **regional exposure** (issuer country and region, and currency, cash counted in
 CAD), sector exposure, news about the client's stocks or sectors published
 during the period, and the investor profile with its guardrails. The issuer

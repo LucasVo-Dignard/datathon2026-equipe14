@@ -51,9 +51,10 @@ resource "aws_iam_role_policy" "web_bedrock" {
   })
 }
 
-# The app's agent calls this environment's AgentCore research harness
-# (app/research.js), created by scripts/setup-research-agent.sh. Its name
-# follows the environment prefix: <prefix with "_">_research-<suffix>.
+# The app's agent calls this environment's AgentCore research and reviewer
+# harnesses (app/research.js), created with the AWS CLI (see ../agents/README.md).
+# Their names follow the environment prefix: <prefix with "_">_research-<suffix>
+# and <prefix with "_">_reviewer-<suffix>.
 resource "aws_iam_role_policy" "web_research_harness" {
   name = "invoke-research-harness"
   role = aws_iam_role.web.id
@@ -61,9 +62,12 @@ resource "aws_iam_role_policy" "web_research_harness" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["bedrock-agentcore:InvokeHarness", "bedrock-agentcore:InvokeAgentRuntime"]
-      Resource = "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:harness/${replace(local.prefix, "-", "_")}_research-*"
+      Effect = "Allow"
+      Action = ["bedrock-agentcore:InvokeHarness", "bedrock-agentcore:InvokeAgentRuntime"]
+      Resource = [
+        "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:harness/${replace(local.prefix, "-", "_")}_research-*",
+        "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:harness/${replace(local.prefix, "-", "_")}_reviewer-*",
+      ]
     }]
   })
 }
