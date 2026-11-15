@@ -1,6 +1,6 @@
 {
-  "name": "Mon portefeuille",
-  "short_name": "Portefeuille",
+  "name": "CourtIAge Direct",
+  "short_name": "CourtIAge",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
