@@ -1,11 +1,12 @@
 # Chatbot (prototype)
 
 Node.js server: username-only login (no password, this is
-a prototype), conversations per user. Profiles and conversations are stored in
-Postgres when `DATABASE_URL` is set; users and login sessions (and everything,
-without a database) are in a JSON file.
+a prototype), conversations per user. Users, login sessions, profiles,
+portfolios and conversations are stored in Postgres when `DATABASE_URL` is set,
+otherwise in a JSON file (see [Storage](#storage)).
 
 - `server.js`: API (`/api/login`, `/api/chats`, ...) and static files
+- `session-store.js`: users and login sessions
 - `bot.js`: **the agent**. Claude Opus 5.5 on Amazon Bedrock
   (`@anthropic-ai/bedrock-sdk`) writes the answers in Markdown from the
   conversation and the user's investor `profile`. For questions about a
@@ -64,16 +65,34 @@ the prefilled answers. The result page explains the outcome.
 API (logged-in user): `GET /api/profile/questionnaire`, `GET /api/profile`,
 `PUT /api/profile { answers }`.
 
-### Storage
+All thresholds are prototype assumptions, for simulation only, not financial advice.
 
-`profile-store.js` is the only file that reads or writes profiles:
+## Storage
 
-- **`DATABASE_URL` set** → Postgres, table `investor_profiles`. The table is created
-  by the Flyway migration `db/migrations/V4__create_investor_profiles.sql` (see
-  `db/README.md`), not by the app. If it is missing, the server refuses to start.
-  Needs the `pg` package (`npm install`).
-- **not set** → the prototype JSON file (`db.users[username].profile`), so the app
-  still runs without a database.
+Each kind of data has one store file, and only that file reads or writes it:
+
+| Store | Postgres tables (migration) | JSON file |
+|---|---|---|
+| `session-store.js` | `users`, `sessions` (V12) | `db.users`, `db.sessions` |
+| `profile-store.js` | `investor_profiles` (V4) | `db.users[username].profile` |
+| `portfolio-store.js` | `portfolios`, `portfolio_holdings` (V7) | `db.users[username].portfolio` |
+| `chat-store.js` | `chats`, `chat_messages` (V9) | `db.chats` |
+
+- **`DATABASE_URL` set** → Postgres. The tables are created by the Flyway migrations
+  in `db/migrations` (see `db/README.md`), not by the app. If one is missing, the
+  server refuses to start. Needs the `pg` package (`npm install`). Since V12,
+  `investor_profiles`, `portfolios`, `notification_subscriptions` and `chats` have a
+  foreign key to `users`. Sessions expire after 30 days, like the cookie.
+- **not set** → the prototype JSON file (`app/data/db.json`, or `DATA_FILE`), so the
+  app still runs without a database.
+
+Reports are separate: S3 with `REPORTS_BUCKET`, otherwise the JSON file (see [Reports](#reports)).
+
+On each start with Postgres, if the JSON file still has users, sessions or
+conversations, the server copies them into the database (`json-import.js`, along with
+profiles and portfolios saved before the environment had a database), keeps a copy of
+the file as `db.json.imported-<timestamp>`, then removes them from the file. Rows
+already in the database are kept. Users stay logged in and keep their conversations.
 
 ```bash
 DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm start   # local docker compose DB
@@ -84,25 +103,16 @@ On the EC2, nothing to set by hand: before each start, `chatbot-db-env` (in
 `infra/user_data.sh.tftpl`) builds `DATABASE_URL` for that environment's RDS from
 its endpoint and Secrets Manager, with `sslmode=verify-full` and the RDS root
 certificates shipped in the image. If the environment has no database yet, the
-app uses the JSON file. Users and sessions are still in the JSON file
-(login prototype). Once a SQL `users` table exists, add the foreign key in a new migration.
-All thresholds are prototype assumptions, for simulation only, not financial advice.
+app uses the JSON file.
 
 ## Conversations
 
-`chat-store.js` is the only file that reads or writes conversations, with the same
-rule as profiles:
+The question and the agent's answer are saved together, once the answer is known.
 
-- **`DATABASE_URL` set** → Postgres: `chats` (id, owner, title, dates) and
-  `chat_messages` (one row per message, deleted with their chat). Created by
-  `db/migrations/V9__create_chats.sql`; the server refuses to start if they are missing.
-  The question and the agent's answer are saved together, once the answer is known.
-- **not set** → the prototype JSON file (`db.chats`).
-
-Conversations already in an environment's JSON file are not copied to the database.
-
-Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**
-database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`.
+Tests: `npm test` (from the repo root). To also test Postgres, point
+`TEST_DATABASE_URL` at a **throwaway** database with migrations V1..V12 applied (the
+tests delete rows, and drop and recreate `investor_profiles`, `chats` and
+`chat_messages`): `TEST_DATABASE_URL=postgres://... npm test -- --test-concurrency=1`.
 
 ## Portfolio
 
@@ -126,9 +136,7 @@ API (logged-in user): `GET /api/portfolio` (`null` until the user has chosen),
 `PUT /api/portfolio/holdings/:symbol { quantity }` (add or edit),
 `DELETE /api/portfolio/holdings/:symbol`.
 
-Storage works like profiles: with `DATABASE_URL`, tables `portfolios` and
-`portfolio_holdings` (migration `V7__create_portfolios.sql`, the server refuses to
-start without it). Otherwise `db.users[username].portfolio` in the JSON file.
+Storage: see [Storage](#storage).
 
 ## ETFs
 
@@ -181,7 +189,7 @@ Storage (`reports-store.js`, last 20 reports per user):
 - **`REPORTS_BUCKET` set** → private S3 bucket (`infra/reports.tf`), one JSON object
   per report at `reports/<username>/<id>.json`. On the EC2, `scripts/deploy-app.sh`
   writes `REPORTS_BUCKET` into `/etc/chatbot.env` from the Terraform output.
-- **not set** → the prototype JSON file (`db.reports`), like conversations.
+- **not set** → the prototype JSON file (`db.reports`).
 
 ## Price alerts by email
 

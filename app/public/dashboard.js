@@ -197,7 +197,8 @@
 
     $('news-note').textContent = news.real
       ? 'Sources : CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch et Yahoo Finance, '
-        + 'dans leur langue d’origine. Le ton est détecté automatiquement par Amazon Comprehend : un indice, pas un avis. '
+        + 'dans leur langue d’origine. D’abord les articles sur vos titres, puis l’actualité utile aux investisseurs '
+        + '(sociétés cotées, thèmes de marché). Le ton est détecté automatiquement par Amazon Comprehend : un indice, pas un avis. '
         + 'Cliquez sur un titre pour lire l’article chez l’éditeur.'
       : 'Actualités fictives (prototype).';
 
@@ -226,6 +227,8 @@
       li.append(tags, h3);
       if (n.summary) li.append(el('p', {}, n.summary));
       li.append(el('span', { class: 'meta' }, `${n.source} · ${ago(n.publishedAt)}`));
+      // General news: why it is shown (listed company, market theme).
+      if (n.relevance) li.append(el('span', { class: 'meta why' }, `Pourquoi cet article : ${n.relevance}`));
       return li;
     }));
   }

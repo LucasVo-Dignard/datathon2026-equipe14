@@ -198,6 +198,7 @@ body.resizing iframe, body.resizing .chart { pointer-events: none; }
 .tag.sentiment.pos { color: var(--up); }
 .tag.sentiment.neg { color: var(--down); }
 .tag.lang { font-weight: 600; }
+.news-item .meta.why { display: block; margin-top: 2px; font-style: italic; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag {
   font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
