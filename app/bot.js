@@ -5,8 +5,9 @@
 // Quand une question porte sur une entreprise (résultats, chiffres, actualités),
 // Claude appelle l'outil research_company : il déclenche l'agent de recherche
 // AgentCore (voir research.js), qui cherche d'abord dans la base de
-// connaissances des rapports de résultats, puis sur le web si l'entreprise n'y
-// est pas. Claude reçoit son rapport et rédige la réponse pour l'utilisateur.
+// connaissances des rapports de résultats, puis sur Bigdata.com, puis sur le
+// web si les sources précédentes n'ont rien. Claude reçoit son rapport et
+// rédige la réponse pour l'utilisateur.
 //
 // reply() reçoit :
 //   - messages : l'historique complet [{ role: 'user' | 'assistant', content }],
@@ -50,7 +51,7 @@ const MAX_HISTORY = 40;
 // Model turns per reply: research calls plus the final answer.
 const MAX_STEPS = 4;
 
-const SYSTEM = `Tu es l'assistant de « Mon portefeuille », une application qui aide un client à suivre ses placements en actions.
+const SYSTEM = `Tu es l'assistant de « CourtIAge Direct », une application qui aide un client à suivre ses placements en actions.
 Réponds dans la langue de l'utilisateur (le français par défaut), de façon claire et concise.
 Tu connais le profil investisseur du client (ci-dessous) : adapte tes explications à son niveau de risque, son horizon et ses préférences, et signale quand une idée va contre ses garde-fous.
 Tu ne donnes pas de conseil financier personnalisé : tu expliques les notions, les options et les risques pour que le client décide lui-même.
@@ -105,14 +106,14 @@ Quand le client veut configurer ses notifications (par exemple « Configurer les
 5. Termine en mentionnant en une phrase que les alertes de prix par courriel se règlent dans l'onglet Mon profil.
 Ne parle pas de la programmation des rapports si le client n'aborde pas le sujet.`;
 
-const REPORT_SYSTEM = `Tu es l'assistant de « Mon portefeuille », une application qui aide des clients de Banque Nationale Courtage Direct, souvent pressés ou peu experts, à suivre leurs placements.
+const REPORT_SYSTEM = `Tu es l'assistant de « CourtIAge Direct », une application qui aide des clients de Banque Nationale Courtage Direct, souvent pressés ou peu experts, à suivre leurs placements.
 Tu rédiges en français un rapport périodique sur le portefeuille du client, à partir uniquement de la fiche de données fournie (performance, positions, expositions sectorielle, régionale et par devise, actualités, profil investisseur). N'invente aucun chiffre ni aucune nouvelle ; si une donnée manque, dis-le.
 
 Chiffres : exprime tout en pourcentages et en dates, jamais en montants. N'écris aucune valeur en dollars ni dans aucune autre devise, aucun cours et aucune quantité d'actions. Les dates s'écrivent en toutes lettres, sans l'année si elle est évidente (par exemple « 14 novembre »).
 
 Horizon : un rapport hebdomadaire, mensuel ou annuel porte sur toute la période. N'y parle jamais de la dernière séance, de la variation d'un jour ni de ce qui s'est passé « aujourd'hui » : explique l'évolution sur la période (rendement, plus haut et plus bas, titres qui ont le plus monté ou baissé sur la période et leur contribution). Seul le rapport quotidien parle de la dernière séance.
 
-Mise en forme : l'interface affiche du Markdown, et les chiffres clés (rendement de la période, meilleur et plus faible titre, région principale) sont déjà affichés en tuiles au-dessus du rapport. Sois concis et visuel :
+Mise en forme : l'interface affiche du Markdown, et les chiffres clés (rendement de la période, meilleur et plus faible titre, région principale, part hors de vos préférences) sont déjà affichés en tuiles au-dessus du rapport. Sois concis et visuel :
 - Pas de titre général au début (le titre du rapport est déjà affiché) : commence directement par la première section.
 - Une section par thème, avec un titre de niveau 2 (## Titre), dans cet ordre : ## En bref, ## Performance, ## Titres à surveiller, ## Exposition régionale, ## Exposition sectorielle, ## Respect de vos préférences, ## Actualités, ## Cohérence avec votre profil, ## Points d'attention. Omets une section sans contenu.
 - En bref : trois puces au plus, chacune commence par le chiffre ou le fait clé en **gras**, une phrase chacune.
@@ -125,7 +126,7 @@ Mise en forme : l'interface affiche du Markdown, et les chiffres clés (rendemen
 - Longueur : quotidien très court (En bref, Titres à surveiller, Points d'attention suffisent), annuel plus complet avec un bilan de l'année.
 
 Exposition régionale : décris la répartition par pays et région de l'émetteur, et par devise ; signale une forte concentration dans un seul pays ou une seule devise, ainsi que le biais domestique (part du Canada) ou son absence, et rappelle simplement ce que cela implique (risque de change, dépendance à une économie). Compare-la aux régions visées dans le profil (« Régions visées ») : signale une région visée absente du portefeuille, ou une forte exposition à une région non visée.
-Compare la composition du portefeuille aux garde-fous du profil (concentration sectorielle, diversification, liquidités) et signale les écarts.
+Compare la composition du portefeuille aux garde-fous du profil (concentration sectorielle, nombre d'actifs, part des cryptoactifs) et signale les écarts.
 
 FNB : un FNB est un panier de titres. L'exposition sectorielle de la fiche décompose déjà les FNB selon leur composition publiée : un FNB peut donc exposer le client à un secteur qu'il ne détient pas directement. Pour chaque FNB, tu peux citer ses principaux secteurs et titres (section « COMPOSITION DES FNB »). Leur répartition géographique n'est pas publiée : dis-le plutôt que de la deviner.
 Respect de vos préférences : la section « CONFLITS AVEC LES PRÉFÉRENCES DU PROFIL » liste les titres et FNB fortement exposés à un secteur que le client veut éviter ou à une activité qu'il exclut. S'il y en a, consacre-leur la section ## Respect de vos préférences avec un tableau (Titre | Motif | Part du FNB | Part du portefeuille), explique en une phrase pourquoi un FNB peut contenir ce secteur sans que le client l'ait choisi, et mentionne-les aussi dans En bref. N'en invente aucun ; s'il n'y en a pas et que le profil a des préférences, dis en une phrase que le portefeuille les respecte.
@@ -165,7 +166,7 @@ const RESEARCH_TOOL = {
         description:
           'true when the answer needs sector, market or economic context: how the company\'s sector or industry is ' +
           'doing, sector risks, comparison with the market, interest rates, macro environment. Adds a daily snapshot ' +
-          'of US sector performance, indexes, commodities, currencies and yields to the research. Always added for ' +
+          'of the US-focused market (sector performance, indexes, commodities, yields) to the research. Always added for ' +
           '"judgment" requests.',
       },
     },
@@ -202,7 +203,7 @@ const PORTFOLIO_TOOL = {
     'Full view of the logged-in client\'s portfolio: every position with quantity, value and gain in CAD, weight, ' +
     'sector, industry and country (from the market database); breakdowns by sector, industry, country and listing ' +
     'currency; the check of the investor profile\'s guardrails (largest sector, number of assets, crypto share, ' +
-    'excluded activities); fictional performance history. Fast, no parameters. Call it for questions about the ' +
+    'excluded activities); 1-month, 3-month and 1-year returns from the fictional performance history. Fast, no parameters. Call it for questions about the ' +
     'client\'s own portfolio that the summary in the system prompt does not answer (diversification, concentration, ' +
     'exposure, gains per position, guardrails).',
   input_schema: { type: 'object', properties: {}, additionalProperties: false },
@@ -255,7 +256,8 @@ function getClient() {
   // Created on first use so the server starts even without AWS credentials.
   if (!client) {
     client = new AnthropicBedrockMantle({
-      // The app container on the EC2 gets no AWS_REGION: default to the project's.
+      // The EC2's user_data sets AWS_REGION, the AWS Batch job definition
+      // AWS_DEFAULT_REGION; locally neither may be set: default to the project's.
       awsRegion: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
       // Refusal fallback: Bedrock has no server-side `fallbacks` parameter,
       // so the SDK middleware retries a declined request on Claude Opus 4.8.

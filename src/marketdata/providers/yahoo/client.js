@@ -11,15 +11,15 @@ const { addDays } = require('../../values');
 
 const PROVIDER = 'yahoo';
 
-// Quote summary modules flattened into one `info` object, like yfinance's
-// Ticker.info. On a key collision the first module wins.
+// Quote summary modules flattened into one `info` object. On a key collision
+// the first module wins.
 const INFO_MODULES = ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics', 'summaryProfile'];
 // Funds (ETFs): what they hold. Kept out of `info` (no key collisions); empty for stocks.
 const FUND_MODULES = ['quoteType', 'fundProfile', 'topHoldings'];
 const SUMMARY_MODULES = [...INFO_MODULES, ...FUND_MODULES, 'upgradeDowngradeHistory'];
-// Profile, metrics, price target and rating actions all read the same quote
-// summary: keep each symbol's briefly so a refresh costs a single request,
-// even when several symbols load at once.
+// Profile, metrics, price target, rating actions and fund composition all read
+// the same quote summary: keep each symbol's briefly so a refresh costs a single
+// request, even when several symbols load at once.
 const SUMMARY_TTL_MS = 60 * 1000;
 
 function defaultLibrary() {

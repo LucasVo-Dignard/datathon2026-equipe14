@@ -23,7 +23,7 @@ echo "==> Environment: $ENV_NAME"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 REPO_URL="$(terraform -chdir=infra output -raw ecr_repository_url)"
 INSTANCE_ID="$(terraform -chdir=infra output -raw instance_id)"
-# Empty until infra/reports.tf is applied: the app then keeps reports in its JSON file.
+# Empty if the reports bucket (infra/reports.tf) doesn't exist: the app then keeps reports in its JSON file.
 REPORTS_BUCKET="$(terraform -chdir=infra output -raw reports_bucket 2>/dev/null || true)"
 TAG="$(git rev-parse --short HEAD)"
 if [ -n "$(git status --porcelain -- app src package.json package-lock.json Dockerfile)" ]; then

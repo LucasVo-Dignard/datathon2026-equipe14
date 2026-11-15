@@ -5,6 +5,7 @@
 # - job role:       used by our code: DB secret, Comprehend, SES (alerts),
 #                   Bedrock and the reports bucket (scheduled reports)
 # - scheduler role: used by EventBridge Scheduler; can only submit this job
+#                   definition (daily refresh, news and scheduled reports)
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "ecs_tasks_assume" {
@@ -143,7 +144,7 @@ resource "aws_iam_role" "scheduler" {
 
 data "aws_iam_policy_document" "scheduler" {
   statement {
-    sid     = "SubmitScheduledJobs" # daily refresh and news refresh (same job definition)
+    sid     = "SubmitScheduledJobs" # daily refresh, news and scheduled reports (same job definition)
     actions = ["batch:SubmitJob"]
     resources = [
       aws_batch_job_queue.main.arn,

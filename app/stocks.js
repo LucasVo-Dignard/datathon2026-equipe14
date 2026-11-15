@@ -1,14 +1,15 @@
 'use strict';
 // ---------------------------------------------------------------------------
-// Fiche rapide d'un titre (barre de recherche).
+// Accès aux données de marché de l'app : fiche rapide de la barre de recherche
+// (nom, bourse, devise, dernier cours, variation du jour), cours des positions
+// du portefeuille, titres et FNB tirés au hasard, variation depuis une date
+// (changeSince) et composition des FNB (fund).
 //
 //   - DATABASE_URL défini -> lit company_profiles / price_bars. Si le titre est
 //     absent ou périmé (STALE_MS), le charge d'abord depuis Yahoo et l'enregistre
-//     (profil, métriques, cible des analystes, cours, recommandations).
+//     (profil, métriques, cible des analystes, cours, révisions de note des analystes,
+//     composition des FNB).
 //   - sinon -> interroge Yahoo directement, sans rien enregistrer.
-//
-// Infos volontairement limitées pour l'instant : nom, bourse, devise, dernier
-// cours et variation du jour.
 // ---------------------------------------------------------------------------
 
 const marketdata = require('../src/marketdata');
@@ -26,8 +27,8 @@ function normalizeSymbol(value) {
   return SYMBOL_RE.test(symbol) ? symbol : null;
 }
 
-// Sans base de données, le portefeuille aléatoire pioche dans cette liste
-// (la liste de départ de tracked_symbols, migration V3).
+// Sans base de données, ou si tracked_symbols est vide, le portefeuille
+// aléatoire pioche dans cette liste (la liste de départ de tracked_symbols, migration V3).
 const FALLBACK_SYMBOLS = [
   'RY.TO', 'TD.TO', 'BNS.TO', 'BMO.TO', 'CM.TO', 'NA.TO', 'MFC.TO', 'SLF.TO', 'ENB.TO', 'TRP.TO',
   'CNQ.TO', 'SU.TO', 'CP.TO', 'CNR.TO', 'SHOP.TO', 'CSU.TO', 'ATD.TO', 'BCE.TO', 'T.TO', 'ABX.TO',
@@ -132,7 +133,8 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
   }
 
   // maxAgeMs: Infinity accepte n'importe quel cours en base (le portefeuille
-  // s'en contente : les titres suivis sont rafraîchis chaque jour par le batch).
+  // s'en contente). Le batch quotidien ne rafraîchit que tracked_symbols et les
+  // positions des abonnés aux alertes : les autres titres gardent leur dernier cours en base.
   async function lookup(symbol, { maxAgeMs = STALE_MS } = {}) {
     const cached = await repo.latestQuote(pool, symbol);
     if (cached && now() - cached.fetchedAt.getTime() < maxAgeMs) return toQuote(cached);
@@ -181,7 +183,7 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     try {
       cached = await repo.fundComposition(pool, symbol);
     } catch (err) {
-      // Table missing (migration V11 not applied yet): ask Yahoo, save nothing.
+      // Read failure (table missing, database unavailable...): ask Yahoo, save nothing.
       log.error(`fund composition read error (${symbol}):`, err.message);
       return asFund(await funds.fetch(symbol));
     }

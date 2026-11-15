@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build the daily refresh job image and push it to the batch ECR repository.
+# Build the Batch jobs image (daily refresh, news, scheduled reports) and push
+# it to the batch ECR repository.
 # Same approach as deploy-app.sh: one image per git commit, plus "latest".
 #
 # Usage (from the repo root, with AWS credentials and your environment loaded):

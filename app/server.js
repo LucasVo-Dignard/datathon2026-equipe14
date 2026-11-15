@@ -1,7 +1,9 @@
 'use strict';
-// Prototype chatbot server. Users, sessions, profiles, portfolios and chats go to
-// Postgres when DATABASE_URL is set (see session-store.js, profile-store.js,
-// portfolio-store.js, chat-store.js); without a database, they live in one JSON file.
+// Prototype chatbot server. Users, sessions, profiles, portfolios, chats and
+// report schedules go to Postgres when DATABASE_URL is set (see session-store.js,
+// profile-store.js, portfolio-store.js, chat-store.js, report-schedule-store.js);
+// without a database, they live in one JSON file. Reports go to S3 when
+// REPORTS_BUCKET is set (reports-store.js); price alerts need Postgres.
 // Login is username-only (no password) on purpose: this is a prototype.
 
 const http = require('node:http');
@@ -361,7 +363,7 @@ async function handleApi(req, res, pathname) {
       // With "Accept: application/x-ndjson", the answer is streamed as JSON
       // lines: {"type":"progress",...} for each step of the agents, then
       // {"type":"done", messages, chat} (or {"type":"error", error}).
-      // Otherwise a single JSON response, as before.
+      // Otherwise a single JSON response: { messages, chat }.
       const stream = (req.headers.accept || '').includes('application/x-ndjson');
       const emit = (event) => { if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`); };
       if (stream) {
@@ -476,7 +478,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 // Démarrage avec Postgres : copie en base les utilisateurs, sessions et conversations
-// du fichier JSON (une copie du fichier est gardée), puis les retire du fichier.
+// du fichier JSON, avec les profils et portefeuilles (une copie du fichier est gardée),
+// puis retire utilisateurs, sessions et conversations du fichier. Les rapports
+// programmés (db.reportSchedules) ne sont pas importés.
 // Le fichier reste utilisé pour ce qui n'est pas en base (rapports sans REPORTS_BUCKET) ;
 // sans ce retrait, une session fermée reviendrait au prochain démarrage.
 async function importJsonFile() {

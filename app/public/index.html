@@ -8,9 +8,9 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Portefeuille">
+  <meta name="apple-mobile-web-app-title" content="CourtIAge">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Mon portefeuille – équipe 14</title>
+  <title>CourtIAge Direct – équipe 14</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -23,7 +23,7 @@
   <main id="login-view" class="login" hidden>
     <header class="login-brand"><span>COURT<span class="brand-ia">IA</span>GE DIRECT</span></header>
     <form id="login-form" class="login-card">
-      <h1>Mon portefeuille</h1>
+      <h1>Connexion</h1>
       <p class="muted">Prototype – connectez-vous avec un nom d'utilisateur.<br>Le compte est créé automatiquement.</p>
       <input id="login-username" name="username" placeholder="Nom d'utilisateur" autocomplete="username"
              maxlength="32" required autofocus>
@@ -42,7 +42,7 @@
         <button data-tab="reports" aria-pressed="false">Rapports <span class="badge new" data-reports-badge hidden>Nouveau</span></button>
       </nav>
       <form id="stock-search" class="stock-search" role="search">
-        <input id="stock-query" type="search" placeholder="Rechercher un symbole (ex. RY)" aria-label="Symbole boursier"
+        <input id="stock-query" type="search" placeholder="Rechercher un symbole (ex. RY.TO)" aria-label="Symbole boursier"
                maxlength="15" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search">
       </form>
       <div class="account">
@@ -113,19 +113,10 @@
             </div>
           </div>
           <div id="chart" class="chart" tabindex="0" role="img"></div>
-          <details class="data-view">
-            <summary>Afficher les données du graphique</summary>
-            <div class="table-wrap scroll">
-              <table id="history-table" class="table">
-                <thead><tr><th>Date</th><th class="num">Valeur</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </details>
         </section>
 
         <section class="card dash-section">
-          <div class="card-head"><h2>Mes actions</h2></div>
+          <div class="card-head"><h2>Mes titres</h2></div>
           <div class="table-wrap">
             <table id="holdings" class="table">
               <thead>
@@ -158,7 +149,7 @@
           <div class="card-head">
             <div>
               <h2>Actualités</h2>
-              <p class="muted small">Liées à vos titres et à leurs secteurs</p>
+              <p class="muted small">Sur vos titres et l’actualité utile aux investisseurs</p>
             </div>
             <div id="news-filter" class="chips" role="group" aria-label="Filtrer par secteur"></div>
           </div>

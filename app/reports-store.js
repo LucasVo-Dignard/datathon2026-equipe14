@@ -6,7 +6,8 @@
 //                              par rapport : reports/<utilisateur>/<id>.json
 //   - sinon                 -> fichier JSON du prototype (db.reports)
 //
-// Un rapport a la forme { id, owner, period, title, asOf, createdAt, content }.
+// Un rapport a la forme { id, owner, period, title, asOf, createdAt, highlights,
+// content }, plus scheduled et scheduledFor pour un rapport programmé.
 // On garde les MAX_REPORTS plus récents par utilisateur.
 // ---------------------------------------------------------------------------
 
@@ -41,7 +42,8 @@ function createS3Store({ bucket, client }) {
   const {
     S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, DeleteObjectCommand,
   } = require('@aws-sdk/client-s3');
-  // Same region default as bot.js: the EC2 container has no AWS_REGION set.
+  // Same region default as bot.js: the EC2's user_data sets AWS_REGION, the AWS
+  // Batch job definition AWS_DEFAULT_REGION, and locally neither may be set.
   const s3 = client || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
   const prefix = (username) => `reports/${encodeURIComponent(username)}/`;
   const key = (username, id) => `${prefix(username)}${id}.json`;

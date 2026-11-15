@@ -3,11 +3,13 @@
 // Portefeuille simulé du client.
 //
 // À la création du compte, l'utilisateur choisit :
-//   - 'random' : quelques titres tirés au hasard parmi ceux en base (tracked_symbols),
+//   - 'random' : quelques titres tirés au hasard parmi ceux en base (tracked_symbols,
+//                ou une liste de départ sans base) et des FNB connus (RANDOM_ETFS),
 //   - 'custom' : un portefeuille vide qu'il remplit lui-même.
 // Les positions (symbole, quantité, coût moyen) sont dans portfolio-store.js ;
 // les cours viennent de stocks.js (base ou Yahoo). Tout est valorisé en CAD.
-// L'historique de performance et les actualités restent fictifs (prototype).
+// Seul l'historique de performance reste fictif (prototype) ; les actualités
+// sont réelles avec une base (news.js), des exemples sinon.
 // ---------------------------------------------------------------------------
 
 const CURRENCY = 'CAD';

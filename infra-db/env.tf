@@ -4,7 +4,7 @@
 #   default workspace       -> prod, resources named "datathon2026-equipe14-*"
 #   lucas / andre / youcef  -> dev,  resources named "datathon2026-equipe14-<name>-*"
 #
-# The workspace comes from TF_WORKSPACE (set in ../.env-dev, see README.md).
+# The workspace comes from TF_WORKSPACE (set in ../.env-dev, see ../ENVIRONMENTS.md).
 # Each workspace has its own state in the same bucket (env:/<name>/...).
 # Keep this file identical in infra/, infra-db/ and infra-batch/.
 # ---------------------------------------------------------------------------

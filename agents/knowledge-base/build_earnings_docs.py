@@ -9,7 +9,9 @@ research agent filter the knowledge base by stock symbol.
 
 Usage: python3 -I build_earnings_docs.py OUT_DIR   (then see agents/README.md)
 Add a company: append a line to DOCS with the Exhibit 99.1 URL of its latest
-earnings 8-K (EDGAR filing index of the company).
+earnings 8-K (EDGAR filing index of the company). Each entry is a tuple
+(symbol without exchange suffix, company name, filing date YYYY-MM-DD,
+period label, Exhibit 99.1 URL).
 """
 import json, sys, re, os, urllib.request, html
 from html.parser import HTMLParser

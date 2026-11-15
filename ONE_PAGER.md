@@ -22,7 +22,8 @@ comme pour une personne tentée par un titre très médiatisé, peut leur nuire.
   des règles, des garde-fous (volatilité, part en cryptoactifs, concentration,
   exclusions ESG), et des tensions détectées entre les demandes et le profil.
 - **Des jobs autonomes** (AWS Batch) : mise à jour quotidienne des marchés, alertes
-  de prix, et veille de l'actualité toutes les 2 h.
+  de prix, veille de l'actualité toutes les 2 h, et rapports programmés rédigés
+  toutes les heures.
 
 ### Originalité
 - **Un profil qui contredit au besoin**. Le risque retenu est le plus prudent entre
@@ -32,18 +33,20 @@ comme pour une personne tentée par un titre très médiatisé, peut leur nuire.
 - **Une information proactive** : rapports périodiques, et alertes par courriel dont
   le seuil suit le niveau de risque (de 2 à 7 %).
 - **Une veille d'actualité par portefeuille**. Amazon Comprehend rattache les
-  articles des médias canadiens aux titres détenus, là où Yahoo ne couvre presque
-  pas la TSX.
+  articles des médias canadiens et de MarketWatch aux titres détenus, là où
+  Yahoo ne couvre presque pas la TSX.
 - **Une IA économe** : chaque recherche payante est versée dans la base de
   connaissances, et la même question devient gratuite ensuite.
 
 ### Sources de données
-Uniquement des données publiques, récupérées à la demande et horodatées :
+Des données publiques, récupérées à la demande et horodatées, plus Bigdata.com
+(payant, via l'agent de recherche) :
 - **Marchés** : Yahoo Finance (cours ajustés, fondamentaux, analystes, FNB, change)
   et companiesmarketcap.com (environ 1 000 sociétés suivies).
-- **Documents officiels** : SEC EDGAR (communiqués de résultats) et Bigdata.com.
-- **Actualité** : CBC, Radio-Canada, The Globe and Mail et MarketWatch (titres et
-  liens seulement, conformément à leurs conditions).
+- **Documents officiels** : SEC EDGAR (communiqués de résultats).
+- **Données financières premium** : Bigdata.com, au plus 3 appels par recherche.
+- **Actualité** : CBC, Radio-Canada, The Globe and Mail et MarketWatch (titres,
+  courts extraits de 400 caractères au plus et liens, conformément à leurs conditions).
 
 ### Capacité d'explication
 - **Chaque conclusion est reliée à ses données.** Le score de risque est détaillé

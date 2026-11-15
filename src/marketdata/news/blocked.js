@@ -1,7 +1,7 @@
 'use strict';
 // Publishers of automated or AI-generated articles (mostly syndicated through
-// Yahoo Finance): left out at ingestion (jobs/news-refresh.js) and in the app
-// (app/news.js) for articles already stored.
+// Yahoo Finance): left out at ingestion (jobs/news-refresh.js), which also
+// purges those already stored, and in the app (app/news.js) until then.
 
 // Compared on the publisher name lowercased, letters and digits only, so
 // "Simply Wall St." and "Simply Wall St (via Yahoo Finance)" both match.

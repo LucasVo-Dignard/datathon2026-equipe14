@@ -3,7 +3,9 @@
 // Copie le fichier JSON du prototype dans Postgres, au démarrage avec
 // DATABASE_URL : utilisateurs, sessions, conversations, et les profils /
 // portefeuilles écrits quand l'environnement n'avait pas encore de base.
-// Ce qui existe déjà en base est gardé (ON CONFLICT DO NOTHING). Une seule
+// Ce qui existe déjà en base est gardé (ON CONFLICT DO NOTHING ; pour un
+// utilisateur, DO UPDATE garde seulement la date de création la plus ancienne).
+// Les rapports programmés (db.reportSchedules) ne sont pas importés. Une seule
 // transaction : en cas d'erreur, rien n'est importé.
 // ---------------------------------------------------------------------------
 

@@ -173,9 +173,6 @@ async function fundComposition(db, symbol) {
 
 // --- Reads -------------------------------------------------------------------
 
-// Latest profile and the last two daily closes of a symbol, from any
-// provider, or null if no price is cached. `fetchedAt` is when the latest bar
-// was fetched, to decide whether the data is stale.
 // Last close on or before `date` (ISO), or null.
 async function closeOnOrBefore(db, symbol, date) {
   const { rows: [bar] } = await db.query(
@@ -184,6 +181,9 @@ async function closeOnOrBefore(db, symbol, date) {
   return bar || null;
 }
 
+// Latest profile and the last two daily closes of a symbol, from any
+// provider, or null if no price is cached. `fetchedAt` is when the latest bar
+// was fetched, to decide whether the data is stale.
 async function latestQuote(db, symbol) {
   const { rows: [profile] } = await db.query(
     `SELECT name, exchange, currency, country, sector FROM company_profiles

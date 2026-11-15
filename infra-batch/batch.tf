@@ -9,7 +9,7 @@ resource "aws_batch_compute_environment" "main" {
 
   compute_resources {
     type               = "FARGATE"
-    max_vcpus          = 1 # one job at a time is plenty
+    max_vcpus          = 1 # up to four 0.25 vCPU jobs at once
     subnets            = [data.aws_subnet.public.id]
     security_group_ids = [aws_security_group.job.id]
   }
@@ -70,8 +70,8 @@ resource "aws_batch_job_definition" "daily_refresh" {
       { name = "DB_SECRET_ARN", value = local.db_secret_arn },
       { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
       { name = "REFRESH_ENABLED", value = tostring(local.refresh_enabled) },
-      # Price-move alerts by email (SES) after the refresh (price-alerts.js).
-      # An empty ALERTS_SENDER turns them off.
+      # Price-move alerts by email (SES), sent mid-run once the subscribers'
+      # holdings are refreshed (price-alerts.js). An empty ALERTS_SENDER turns them off.
       { name = "ALERTS_SENDER", value = local.alerts_sender },
       { name = "SES_CONFIGURATION_SET", value = local.alerts_sender != "" ? local.alerts_configuration_set : "" },
       { name = "APP_URL", value = "http://${data.aws_eip.web.public_ip}" },

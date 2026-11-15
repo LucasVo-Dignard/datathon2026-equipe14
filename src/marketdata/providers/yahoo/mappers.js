@@ -2,8 +2,8 @@
 // Translate Yahoo data (from YahooClient) into marketdata models.
 //
 // Yahoo units: market cap is in units; margins, ROE and
-// `trailingAnnualDividendYield` are already fractions. (`dividendYield` is
-// not used: yfinance reported it as a percentage.)
+// `trailingAnnualDividendYield` are already fractions (`dividendYield` is
+// not used).
 
 const models = require('../../models');
 const { toDate, toFloat, toInt, toText } = require('../../parsing');

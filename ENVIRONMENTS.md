@@ -1,8 +1,9 @@
 # Environments
 
 One AWS account, four environments. Each has its own VPC, EC2 web server
-(with its own Elastic IP), RDS database, migrations bucket, ECR repositories
-and Batch job:
+(with its own Elastic IP), RDS database, migrations bucket, reports bucket,
+SES sender identity, ECR repositories and Batch jobs. The research agents
+(AgentCore, see `agents/README.md`) exist only in `andre` and prod:
 
 | Environment | Terraform workspace | Resource names |
 | --- | --- | --- |
@@ -40,7 +41,7 @@ terraform -chdir=infra-db init && terraform -chdir=infra-db apply
 python db/migrate.py                  # schema on your RDS
 ./scripts/deploy-app.sh               # app image on your web server
 terraform -chdir=infra-batch init && terraform -chdir=infra-batch apply
-./scripts/deploy-batch.sh             # job image
+bash scripts/deploy-batch.sh          # job image
 terraform -chdir=infra output url
 ```
 
@@ -49,8 +50,10 @@ Dev environments differ from prod only in their defaults:
 - `allow_my_ip` is on: the IP of the machine running `terraform apply` is
   allowed, in addition to `allowed_cidrs` (Polytechnique). Apply `infra` again
   when you change network.
-- The daily schedule is off (`schedule_enabled`): run the job by hand (see
-  `infra-batch/README.md`).
+- All schedules (refresh, news, reports) are off (`schedule_enabled`), and so
+  is `refresh_enabled`: a daily refresh run by hand does nothing unless
+  `infra-batch` is applied with `-var refresh_enabled=true`. The news and
+  reports jobs can be run by hand (see `infra-batch/README.md`).
 - The database starts empty, apart from the migrations.
 
 Override anything with `-var` or a `<name>.tfvars` file (gitignored) passed

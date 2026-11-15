@@ -170,8 +170,6 @@ test('rating actions without target fields', async () => {
   assert.ok(actions.every((a) => a.priceTarget === null && a.priceTargetAction === null));
 });
 
-// --- Client (with a fake yahoo-finance2 library) --------------------------------
-
 test('fund composition: sector keys mapped, holdings sorted, stocks are not funds', async () => {
   const etf = await new YahooFundCompositionFetcher(new FakeYahooClient({
     info: { longName: 'iShares S&P/TSX Capped Energy Index ETF' },
@@ -196,6 +194,8 @@ test('fund composition: sector keys mapped, holdings sorted, stocks are not fund
 
   await assert.rejects(new YahooFundCompositionFetcher(new FakeYahooClient()).fetch('NOPE'), SymbolNotFoundError);
 });
+
+// --- Client (with a fake yahoo-finance2 library) --------------------------------
 
 test('client prices many symbols with one batch quote request', async () => {
   const seen = [];

@@ -8,7 +8,7 @@
 //
 // Un profil stocké a la forme { answers, result, updatedAt } (updatedAt en ms).
 // Le reste de l'app ne passe que par get() / save() : changer de base ne touche
-// que ce fichier.
+// que ce fichier (sauf le pool, partagé, voir plus bas).
 // ---------------------------------------------------------------------------
 
 function createJsonStore({ db, saveDb }) {
@@ -41,7 +41,7 @@ function createPgStore({ connectionString }) {
 
   return {
     kind: 'postgres',
-    pool, // partagé avec les alertes (notifications.js)
+    pool, // partagé avec les alertes (notifications.js), les actualités (news.js) et le job des rapports programmés
     // Le schéma appartient à Flyway (db/migrations) : on vérifie seulement que la table existe.
     async init() {
       const { rows } = await pool.query("SELECT to_regclass('investor_profiles') AS t");

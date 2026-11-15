@@ -38,7 +38,7 @@ test('no portfolio until the user chooses', async () => {
   await assert.rejects(service.create('alice', 'other'), /Mode invalide/);
 });
 
-test('random portfolio picks priced symbols and values them in CAD', async () => {
+test('random portfolio without ETFs (no randomFunds) picks priced symbols and values them in CAD', async () => {
   const { db, service } = setup();
   const p = await service.create('alice', 'random');
   assert.equal(p.source, 'random');

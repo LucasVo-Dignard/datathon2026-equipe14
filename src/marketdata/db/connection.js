@@ -4,7 +4,8 @@
 // Two modes, so the same code runs locally and on AWS:
 //
 // - DATABASE_URL set (local Docker Postgres, see db/README.md, or the web
-//   server's /etc/chatbot.env):
+//   server's /run/chatbot/db.env, written by chatbot-db-env at startup, see
+//   infra/user_data.sh.tftpl):
 //       DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata
 // - Otherwise DB_HOST, DB_PORT, DB_NAME and DB_SECRET_ARN (the AWS Batch job,
 //   see infra-batch/). The user name and password are read from Secrets

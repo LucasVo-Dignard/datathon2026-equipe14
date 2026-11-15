@@ -19,9 +19,9 @@
 //   - counts Bigdata.com tool calls per day and, once BIGDATA_DAILY_CALLS is
 //     reached, invokes the harness without the Bigdata.com tools;
 //   - fetches the Bigdata.com market tearsheet (sectors, indexes, rates: the
-//     same for every company, about 35 credits) once per UTC day through the
-//     gateway, and gives it to the researches that need market context
-//     instead of letting each of them buy it;
+//     same for every company, about 17 credits, see ../agents/README.md) once
+//     per UTC day through the gateway, and gives it to the researches that need
+//     market context instead of letting each of them buy it;
 //   - saves every report that used Bigdata.com to the knowledge base, so the
 //     same question is answered from it next time, at no cost.
 //
@@ -30,7 +30,8 @@
 //   RESEARCH_REVIEWER_ARN       peer-review harness, used for judgment requests
 //                               only (unset = no review)
 //   BIGDATA_DAILY_CALLS         daily budget of Bigdata.com tool calls (default 9:
-//                               at least 3 researches, ~90 credits)
+//                               at least 3 researches of ~39 credits, 2 on days
+//                               the market snapshot is bought: it counts as one call)
 //   RESEARCH_KB_BUCKET, RESEARCH_KB_ID, RESEARCH_KB_DATA_SOURCE_ID
 //                               where to save reports (unset = not saved)
 //   RESEARCH_USAGE_FILE         budget counter file (default: next to DATA_FILE);

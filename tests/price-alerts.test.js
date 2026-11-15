@@ -1,7 +1,9 @@
 'use strict';
 // Price-move alerts job (src/marketdata/jobs/price-alerts.js).
 // Message tests always run. Database tests need TEST_DATABASE_URL on a
-// THROWAWAY database with db/migrations V1..V12 applied (they delete rows).
+// THROWAWAY database with all db/migrations applied (they delete rows). One
+// test runs daily-refresh main([]), which touches every tracked symbol's
+// last_refreshed_at.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const alertsJob = require('../src/marketdata/jobs/price-alerts');

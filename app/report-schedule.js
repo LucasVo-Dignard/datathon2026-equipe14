@@ -1,8 +1,8 @@
 'use strict';
 // ---------------------------------------------------------------------------
 // Rapports programmés : validation, description en français et calcul des
-// échéances. Sans dépendance : utilisé par l'app (bot.js, server.js) et par le
-// job horaire (jobs/scheduled-reports.js).
+// échéances. Sans dépendance : utilisé par l'app (server.js,
+// report-schedule-store.js) et par le job horaire (jobs/scheduled-reports.js).
 //
 // Un horaire a la forme { period, weekday, day, month, hour, timezone } :
 //   daily   -> du lundi au vendredi à `hour` (pas de séance la fin de semaine)

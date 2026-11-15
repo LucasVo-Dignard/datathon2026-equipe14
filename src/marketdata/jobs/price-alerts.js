@@ -1,12 +1,14 @@
 'use strict';
 // Price-move alerts by email (Amazon SES).
 //
-// Runs at the end of the daily refresh (daily-refresh.js) when ALERTS_SENDER
-// is set, or on its own:
+// Runs inside the daily refresh (daily-refresh.js) when ALERTS_SENDER is set,
+// after the subscribers' holdings are refreshed and before the other symbols,
+// or on its own:
 //
 //     DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
-//     ALERTS_SENDER=alertes@example.com node src/marketdata/jobs/price-alerts.js [--dry-run] [--today 2026-11-13]
+//         node src/marketdata/jobs/price-alerts.js [--dry-run] [--today 2026-11-13]
 //
+// (without --dry-run, also set ALERTS_SENDER)
 // For every subscriber (notification_subscriptions, written by the web app),
 // it compares the two latest daily closes of each symbol in the user's
 // portfolio (portfolio_holdings). A move of threshold_pct or more (the
@@ -18,8 +20,9 @@
 // retried on the next run. While the SES account is in the sandbox, an
 // address that has not been verified yet is rejected by SES and retried later.
 //
-// Environment: ALERTS_SENDER (verified SES identity), optional
-// SES_CONFIGURATION_SET and APP_URL (links in the email).
+// Environment: DATABASE_URL or DB_* (db/connection.js), ALERTS_SENDER
+// (verified SES identity), AWS_REGION, optional SES_CONFIGURATION_SET and
+// APP_URL (links in the email).
 
 const { parseArgs } = require('node:util');
 const { connect, transaction } = require('../db/connection');
@@ -182,7 +185,8 @@ const sesClient = (env = process.env) => {
   return new SESv2Client({ region: env.AWS_REGION || env.AWS_DEFAULT_REGION });
 };
 
-// Called by daily-refresh.js after the refresh. Best effort: never throws.
+// Called by daily-refresh.js between the subscribers' holdings and the other
+// symbols. Best effort: never throws.
 async function sendPriceAlerts(db, { env = process.env, log = console, ses } = {}) {
   if (!env.ALERTS_SENDER) {
     log.info('ALERTS_SENDER not set: no price alerts');

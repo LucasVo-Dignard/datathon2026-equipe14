@@ -6,7 +6,7 @@
   const modal = $('stock-modal');
   const pct = new Intl.NumberFormat('fr-CA', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' });
   const fullDate = new Intl.DateTimeFormat('fr-CA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const SOURCES = { yahoo: 'Yahoo Finance', finnhub: 'Finnhub' };
+  const SOURCES = { yahoo: 'Yahoo Finance' };
   // Yahoo sector names (company profiles and fund weights) in French.
   const SECTORS = {
     Technology: 'Technologie', 'Communication Services': 'Communications', 'Financial Services': 'Services financiers',

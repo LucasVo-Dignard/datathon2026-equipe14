@@ -1,7 +1,7 @@
 'use strict';
 // Users and login sessions, and the JSON file import. JSON backend always runs.
 // Postgres tests need TEST_DATABASE_URL on a THROWAWAY database with
-// db/migrations V1..V12 applied (they delete the ss-* users).
+// all db/migrations applied (they delete the ss-* users).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createSessionStore } = require('../app/session-store');

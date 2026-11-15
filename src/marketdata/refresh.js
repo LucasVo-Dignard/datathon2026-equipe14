@@ -2,7 +2,7 @@
 // Fetch data for symbols and save it, one transaction per (symbol, step).
 //
 // Used by the daily job (jobs/daily-refresh.js) for tracked symbols, and by
-// the web app to load a symbol on demand the first time someone searches it.
+// the web app to load a symbol on demand when its data is missing or stale.
 
 const { transaction } = require('./db/connection');
 const repo = require('./db/repositories');

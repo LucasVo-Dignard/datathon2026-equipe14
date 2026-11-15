@@ -17,7 +17,10 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
 
 const unsubscribeUrl = (appUrl, username, token) => `${appUrl}/desabonnement?u=${encodeURIComponent(username)}&t=${token}`;
 
-// Text + HTML email. paragraphs: strings; table: optional [{ cells: [..], color }] rows.
+// Text + HTML email. paragraphs, after: strings shown before and after the table;
+// table: optional [{ text, cells: [..], color }] rows (text for the plain-text
+// part, cells for HTML); appUrl: optional link to the app; unsubscribe: URL
+// (unsubscribeUrl()), in the footer and the List-Unsubscribe header.
 function emailContent({ subject, paragraphs, table = null, after = [], appUrl, unsubscribe }) {
   const text = [
     ...paragraphs.flatMap((p) => [p, '']),

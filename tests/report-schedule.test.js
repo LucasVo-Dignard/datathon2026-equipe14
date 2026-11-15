@@ -144,7 +144,7 @@ function fakeServices({ schedules, fail = {} }) {
   };
 }
 
-test('job writes the due reports only, and gives back the failed ones', async () => {
+test('job writes the due reports only, skips users without a portfolio, and gives back the failed ones', async () => {
   const base = { timezone: 'America/Toronto', createdAt: at('2026-11-01T00:00:00Z'), updatedAt: at('2026-11-01T00:00:00Z') };
   const services = fakeServices({
     schedules: [

@@ -54,8 +54,8 @@ async function showApp(username) {
   window.Reports.openFromHash(); // link to a report (#rapport/<id>)
 }
 
-// Tabs: portfolio | profile | assistant. On desktop the left pane shows the
-// dashboard or the profile and the assistant is always visible on the right;
+// Tabs: portfolio | profile | reports | assistant. On desktop the left pane shows the
+// dashboard, the profile or the reports and the assistant is always visible on the right;
 // phones show one pane at a time.
 function setTab(tab) {
   $('app-view').dataset.tab = tab;

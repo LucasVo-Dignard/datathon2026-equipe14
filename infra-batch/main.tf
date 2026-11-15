@@ -13,8 +13,8 @@ data "aws_vpc" "main" {
   }
 }
 
-# The job runs in the public subnet with a public IP, so it reaches Yahoo,
-# ECR and Secrets Manager through the internet gateway: no NAT gateway.
+# The jobs run in the public subnet with a public IP, so they reach Yahoo, the
+# RSS feeds and the AWS APIs through the internet gateway: no NAT gateway.
 data "aws_subnet" "public" {
   vpc_id = data.aws_vpc.main.id
   filter {
@@ -65,10 +65,12 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Security group of the job: NO inbound rules at all, so nothing can connect
-# to it, even though it has a public IP while it runs.
-# Outbound: HTTPS (Yahoo, Finnhub, ECR, Secrets Manager, CloudWatch Logs) and
-# the database port to the DB security group only.
+# Security group of the jobs (daily refresh, news, scheduled reports): NO
+# inbound rules at all, so nothing can connect to it, even though it has a
+# public IP while a job runs.
+# Outbound: HTTPS (Yahoo, Finnhub, RSS feeds, ECR, Secrets Manager, CloudWatch
+# Logs, Comprehend, SES, Bedrock, S3) and the database port to the DB security
+# group only.
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "job" {

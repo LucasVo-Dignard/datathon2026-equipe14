@@ -1,5 +1,5 @@
 'use strict';
-// Run: node --test tests/
+// Run: npm test
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validate, buildProfile, profileSummary, publicQuestionnaire, ProfileError, PERSONAS } = require('../app/profile');

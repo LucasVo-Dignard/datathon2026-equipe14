@@ -1,4 +1,4 @@
-<!-- Moved from the root README; the project overview is in ../../README.md. Paths below are relative to the repo root. -->
+<!-- Moved from the root README; the project overview is in ../../README.md. Paths below are relative to src/marketdata, except commands (run from the repo root) and paths starting with app/, tests/, db/ or infra-batch/. -->
 
 # `marketdata` package (`src/marketdata`, Node.js)
 
@@ -33,7 +33,7 @@ TEST_DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata node 
 | Layer | Where | Responsibility |
 | --- | --- | --- |
 | Models | `models.js` | Provider-independent data shapes, one per table |
-| Interfaces | `fetchers/base.js` | One abstract class per kind of data (`ProfileFetcher`, `PriceHistoryFetcher`, `MetricsFetcher`, `NewsFetcher`, `EarningsFetcher`, `RecommendationFetcher`, `PriceTargetFetcher`, `RatingActionFetcher`) |
+| Interfaces | `fetchers/base.js` | One abstract class per kind of data (`ProfileFetcher`, `PriceHistoryFetcher`, `MetricsFetcher`, `NewsFetcher`, `EarningsFetcher`, `RecommendationFetcher`, `PriceTargetFetcher`, `RatingActionFetcher`, `FundCompositionFetcher`) |
 | Clients | `providers/*/client.js` | Transport only: auth, rate limit, retries, errors |
 | Mappers | `providers/*/mappers.js` | Raw provider data → models, unit conversion |
 | Fetchers | `providers/*/index.js` | One class per (provider, kind), e.g. `class FinnhubNewsFetcher extends NewsFetcher` |
@@ -47,14 +47,28 @@ TEST_DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata node 
 | Daily prices | ✓ | |
 | Price target consensus | ✓ | |
 | Analyst rating actions | ✓ | |
+| Fund composition (ETFs, table `fund_compositions`, V11) | ✓ | |
 | News | | ✓ |
 | Earnings | | ✓ |
 | Analyst recommendations | | ✓ |
+
+Finnhub kinds are fetched only when `FINNHUB_API_KEY` is set (it is not on
+AWS). They fill `news_articles`, `earnings_events` and `recommendation_trends`,
+which the app doesn't read: the dashboard news comes from `jobs/news-refresh.js`.
 
 Dates are `"YYYY-MM-DD"` strings; instants (`fetchedAt`, `publishedAt`,
 `gradedAt`) are `Date` objects. To add a provider, write a client and mappers,
 then one class per kind it supports, extending the kind and setting
 `static provider`.
+
+## Jobs (`jobs/`, run on AWS Batch, see `infra-batch/`)
+
+| Job | Schedule | Options and environment |
+| --- | --- | --- |
+| `daily-refresh.js` | weekdays at 18:00 (Toronto) | `--symbols A B` (only these; alerts are still sent, but holdings are not refreshed first); `REFRESH_ENABLED=false` makes it a no-op |
+| `price-alerts.js` | inside the daily refresh when `ALERTS_SENDER` is set: subscribers' holdings are refreshed first, then alerts are sent, then the other symbols | on its own: `--dry-run` (print only, no `ALERTS_SENDER` needed), `--today YYYY-MM-DD`; `ALERTS_SENDER`, optional `SES_CONFIGURATION_SET`, `APP_URL` |
+| `news-refresh.js` | every 2 hours, 7:00 to 23:00 | `NEWS_ENABLED=false` makes it a no-op (see News below) |
+| `populate-top-companies.js` | by hand | see below |
 
 ## Top companies by market cap
 
@@ -70,13 +84,14 @@ DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
     node src/marketdata/jobs/populate-top-companies.js [--limit 1000] [--skip-existing]
 ```
 
-This job allows 60 Yahoo calls a minute (the daily job: 30), so 1000 companies
+This job allows 60 Yahoo calls a minute (like the daily job), so 1000 companies
 take about 17 minutes;
 `--skip-existing` resumes an interrupted run.
 
 ## News (RSS feeds of known media + Yahoo Finance, Amazon Comprehend)
 
-`jobs/news-refresh.js` runs every 2 hours on AWS Batch and fills `news_items`
+`jobs/news-refresh.js` runs every 2 hours from 7:00 to 23:00 (9 runs a day) on
+AWS Batch and fills `news_items`
 and `news_item_symbols` (migration V10). The dashboard shows the articles about
 the user's holdings first (why each one is linked is in the tag's tooltip), then
 general business news.
@@ -87,7 +102,7 @@ general business news.
 | Radio-Canada Économie (RSS) | fr | title, excerpt, link | https://ici.radio-canada.ca/rss |
 | The Globe and Mail, Business (RSS) | en | title, excerpt, link | https://www.theglobeandmail.com/about/rss/ |
 | MarketWatch, Top Stories (RSS) | en | title, excerpt, link | https://www.marketwatch.com/site/rss |
-| Yahoo Finance (news per held symbol, `yahoo-finance2`) | en | title, publisher, link, related tickers | Yahoo terms of service |
+| Yahoo Finance (5 articles per held symbol, up to 80 symbols in alphabetical order, `yahoo-finance2`) | en | title, publisher, link, related tickers | Yahoo terms of service |
 
 - **Original language**: articles are not translated.
 - **Only headlines and short excerpts** (400 characters max) are stored, always
@@ -106,6 +121,8 @@ general business news.
   bills units of 100 characters (3 minimum) per document and per API: about
   10 units per article, so about $0.001 per article. With ~20 new articles per
   run and 9 runs a day, about $0.20 a day; the first run (~150 articles) about $0.15.
+- Publishers of automated or AI-generated articles (`news/blocked.js`) are
+  left out; articles already stored from them are purged by the next run.
 - Feeds and tickers are untrusted input: size and time limits, HTML stripped,
   only http(s) links, rendered with `textContent` and `rel="noopener noreferrer"`.
 

@@ -1,5 +1,6 @@
 'use strict';
-// Real news for the dashboard, read from news_items (V10), filled every 2 h by
+// Real news for the dashboard and the reports, read from news_items (V10),
+// filled every 2 h from 7:00 to 23:00 by
 // src/marketdata/jobs/news-refresh.js (RSS feeds of known media + Yahoo
 // Finance, enriched with Amazon Comprehend).
 //

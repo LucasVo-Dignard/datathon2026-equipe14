@@ -1,14 +1,29 @@
-# Copy to terraform.tfvars (gitignored) to override defaults.
+# Example overrides. Don't copy this to terraform.tfvars: Terraform loads that
+# file in every workspace, prod included (see ../ENVIRONMENTS.md). Pass values
+# with -var, or copy to <name>.tfvars (gitignored) and pass -var-file=<name>.tfvars.
 
-# The job is a no-op until this is true (it starts, logs, and exits).
+# Daily refresh only: when false, the job starts, logs and exits.
+# Default: on in prod, off in dev environments.
 # refresh_enabled = true
 
-# Pause the daily run without destroying anything.
+# Pause the daily and news runs (and, by default, the reports) without
+# destroying anything. Default: on in prod, off in dev environments.
 # schedule_enabled = false
 
 # Weekdays at 18:00 Toronto time (after the market close).
 # schedule_expression = "cron(0 18 ? * MON-FRI *)"
 # schedule_timezone   = "America/Toronto"
 
-# image_tag      = "latest"
-# job_memory_mib = 1024
+# News every 2 hours, 7:00 to 23:00 (schedule_timezone).
+# news_schedule_expression = "cron(0 7-23/2 * * ? *)"
+
+# Scheduled reports every hour. Default for reports_schedule_enabled: same as
+# schedule_enabled.
+# reports_schedule_expression = "cron(0 * * * ? *)"
+# reports_schedule_enabled    = true
+
+# image_tag           = "latest"
+# job_vcpu            = "0.25"
+# job_memory_mib      = 1024
+# job_timeout_seconds = 14400 # default: 4 h in prod, 30 min in dev
+# log_retention_days  = 14

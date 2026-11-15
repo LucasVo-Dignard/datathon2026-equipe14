@@ -17,13 +17,13 @@ variable "image_tag" {
 }
 
 variable "refresh_enabled" {
-  description = "When false, the job starts and exits immediately without fetching or writing anything (REFRESH_ENABLED=false). Default: on in prod, off in dev environments."
+  description = "When false, the daily refresh job starts and exits immediately without fetching or writing anything (REFRESH_ENABLED=false). Does not affect the news and reports jobs. Default: on in prod, off in dev environments."
   type        = bool
   default     = null
 }
 
 variable "schedule_enabled" {
-  description = "Set to false to pause the daily run without destroying anything. Default: on in prod, off in dev environments (run the job by hand there)."
+  description = "Set to false to pause the daily and news runs (and the scheduled reports, unless reports_schedule_enabled is set) without destroying anything. Default: on in prod, off in dev environments (run the jobs by hand there)."
   type        = bool
   default     = null
 }
@@ -47,13 +47,13 @@ variable "job_vcpu" {
 }
 
 variable "job_memory_mib" {
-  description = "Fargate memory in MiB (0.25 vCPU allows 512, 1024 or 2048). pandas + yfinance fit in 1024."
+  description = "Fargate memory in MiB (0.25 vCPU allows 512, 1024 or 2048). The Node jobs fit in 1024."
   type        = number
   default     = 1024
 }
 
 variable "job_timeout_seconds" {
-  description = "Batch stops a run that takes longer than this. Default: 4 h in prod (~1 000 tracked symbols at 30 Yahoo calls/min take about 2 h 15), 30 min in dev."
+  description = "Batch stops a run that takes longer than this. Default: 4 h in prod (~1 000 tracked symbols at 60 Yahoo calls/min take about 2 h 15), 30 min in dev."
   type        = number
   default     = null
 }

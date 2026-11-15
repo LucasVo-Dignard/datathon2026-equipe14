@@ -1,13 +1,14 @@
 'use strict';
-// News refresh, every 2 hours on AWS Batch (schedule in infra-batch/), and
-// locally against the Docker Postgres:
+// News refresh, every 2 hours from 7:00 to 23:00 on AWS Batch (schedule in
+// infra-batch/), and locally against the Docker Postgres:
 //
 //     DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
 //         node src/marketdata/jobs/news-refresh.js
 //
 // 1. Reads the RSS feeds of known media (news/feeds.js).
-// 2. Reads Yahoo Finance news for every symbol held in a portfolio; Yahoo
-//    says which tickers each article is about. Publishers of automated /
+// 2. Reads Yahoo Finance news (5 articles each) for up to 80 symbols held in a
+//    portfolio, in alphabetical order; Yahoo says which tickers each article
+//    is about. Publishers of automated /
 //    AI-generated articles (Simply Wall St, ...) are skipped (news/blocked.js).
 // 3. New articles go through Amazon Comprehend: sentiment, and organizations
 //    -> linked companies (news/enrich.js, news/match.js). Articles stay in

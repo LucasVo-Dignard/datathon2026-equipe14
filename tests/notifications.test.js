@@ -1,6 +1,6 @@
 'use strict';
 // Pure tests always run. The Postgres tests need TEST_DATABASE_URL pointing to a
-// THROWAWAY database with db/migrations V1..V12 applied (they delete rows).
+// THROWAWAY database with all db/migrations applied (they delete rows).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {

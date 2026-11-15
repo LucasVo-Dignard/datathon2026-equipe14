@@ -1,5 +1,7 @@
-# Copy to terraform.tfvars (gitignored) and adjust.
+# Example overrides. Don't copy this to terraform.tfvars: Terraform loads that
+# file in every workspace, prod included (see ../ENVIRONMENTS.md). Pass values
+# with -var, or copy to <name>.tfvars (gitignored) and pass -var-file=<name>.tfvars.
 
-# engine         = "postgres"   # or "mysql"
+# engine         = "postgres"   # only postgres is supported (migrations, app and jobs)
 # engine_version = "17"
 # instance_class = "db.t4g.small"

@@ -13,7 +13,7 @@ function normalizeSymbol(symbol) {
   return cleaned;
 }
 
-// Today's date in the local time zone, like Python's date.today().
+// Today's date in the local time zone.
 function today() {
   const d = new Date();
   return isoDate(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())));

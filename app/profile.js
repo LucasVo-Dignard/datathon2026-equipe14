@@ -20,6 +20,8 @@ const LEVELS = [
 ];
 
 // kind: 'tol' (tolérance) | 'cap' (capacité) | 'pref' (préférence, pas de score)
+//       | 'number' (montant libre) | 'multi' (choix multiples, sans score).
+// L'objectif est 'pref', mais ses points servent de plafond au niveau de risque.
 // points : 0 à 100. weight : poids dans la moyenne (1 par défaut).
 const QUESTIONS = [
   // --- Situation -----------------------------------------------------------

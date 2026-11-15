@@ -18,8 +18,8 @@ How it works (the database is private, only the web server can reach it):
      Manager and run Flyway in Docker.
   3. Prints Flyway's output and exits non-zero if it failed.
 
-Needs only boto3 and the AWS credentials in .env-aws (loaded automatically,
-with .env-dev).
+Needs Python 3.11+, boto3 and the AWS credentials in .env-aws (loaded
+automatically, with .env-dev).
 """
 
 from __future__ import annotations

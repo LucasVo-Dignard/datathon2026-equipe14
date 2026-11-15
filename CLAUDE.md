@@ -2,7 +2,7 @@
 
 ## The project
 
-This project is for a hackathon. We are using AWS to make a tool that users from Banque Nationale Courtage Direct can use. The primary goal is to give people with limited time or knowledge **information**. This information can be reports (weekly, monthly, yearly), notifications about news or fundamentals or changes and more.
+This project is for a hackathon. We are using AWS to make a tool that users from Banque Nationale Courtage Direct can use. The primary goal is to give people with limited time or knowledge **information**. This information can be reports (daily, weekly, monthly, yearly), news linked to holdings, and email price alerts (the only notifications).
 
 ## AWS security rules (mandatory)
 
@@ -48,12 +48,13 @@ creates or deletes AWS resources.
 
 ## Using AWS from this repo
 
-- Load credentials in Git Bash: `set -a; source .env-aws; set +a`
+- Load credentials in Git Bash: `set -a; source .env-aws; source .env-dev; set +a`
   (temporary session token: reload when it expires).
 - Region: `us-east-1`.
 - Infrastructure is Terraform, in three stacks with separate states:
-  `infra/` (VPC, EC2 web server), `infra-db/` (private RDS) and
-  `infra-batch/` (daily refresh job on AWS Batch Fargate). See each folder's
+  `infra/` (VPC, EC2 web server, ECR, SES, reports bucket, Bedrock/AgentCore
+  IAM), `infra-db/` (private RDS) and `infra-batch/` (scheduled jobs on AWS
+  Batch Fargate: daily refresh, news, scheduled reports). See each folder's
   README. Apply in that order; destroy in reverse (`infra-batch/` first).
 - Environments (see `ENVIRONMENTS.md`): prod is the `default` Terraform
   workspace; each developer has their own (`lucas`, `andre`, `youcef`), with
@@ -65,7 +66,8 @@ creates or deletes AWS resources.
   `package.json`, `Dockerfile`), redeploy it to the dev server with
   `./scripts/deploy-app.sh` (builds the image, pushes it to ECR and restarts
   the container on the EC2), then check it works. Batch job changes go
-  through `./scripts/deploy-batch.sh`.
+  through `bash scripts/deploy-batch.sh`; the job image also contains `app/`
+  (scheduled reports), so redeploy it too when such `app/` code changes.
 - Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
   (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
   `terraform destroy` does not delete it).
@@ -77,7 +79,9 @@ creates or deletes AWS resources.
   (the stock search does this in `app/stocks.js`).
   Exception: symbols in `tracked_symbols` are refreshed every weekday by the
   batch job (`src/marketdata/jobs/daily-refresh.js`, `infra-batch/`), so
-  changes can be detected for notifications. Keep that list small. Scheduled
+  changes can be detected for notifications. Prod deliberately tracks about
+  1,000 symbols (`src/marketdata/jobs/populate-top-companies.js`); keep the
+  list small in dev environments. Scheduled
   work does not run on the EC2 web server.
 - Schema changes go only through Flyway migrations in `db/migrations/`
   (`V<n>__<description>.sql`). Never edit a migration that has been applied;

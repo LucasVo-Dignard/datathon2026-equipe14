@@ -6,8 +6,8 @@
 // (voir portfolio.js) et du profil investisseur ; bot.report() la rédige en
 // Markdown. La fiche ne contient que des pourcentages et des dates, jamais de
 // montants, de cours ni de quantités : le rapport ne peut donc pas en citer.
-// L'historique de performance et les actualités du portefeuille sont encore
-// fictifs (prototype) : le rapport l'est donc aussi.
+// Seul l'historique de performance du portefeuille est simulé (prototype) ;
+// avec une base, la variation de chaque titre et les actualités sont réelles.
 // ---------------------------------------------------------------------------
 
 const { profileSummary } = require('./profile');

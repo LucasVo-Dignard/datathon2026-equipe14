@@ -170,7 +170,7 @@ test('every period has a label and title', () => {
   for (const p of Object.values(PERIODS)) assert.ok(p.label && p.title && p.days);
 });
 
-test('real news ({ real, items } from app/news.js): full tickers, no summary, source and tone', () => {
+test('real news ({ real, items } built in app/portfolio.js): full tickers, no summary, source and tone', () => {
   const portfolio = {
     ...PORTFOLIO,
     news: {

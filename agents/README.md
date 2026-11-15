@@ -48,12 +48,23 @@ section and states the verdict. One review per answer; never for a factual
 request.
 
 Every report that used Bigdata.com is saved back to the knowledge base
-(`reports/<SYMBOL>/<SYMBOL>-research-<date>-<id>.txt`, `doc_type=research_report`),
+(`reports/<TICKER>/<TICKER>-research-<date>-<id>.txt`, `doc_type=research_report`),
 so the same question is answered from the knowledge base next time, for free.
+Saving needs all three `RESEARCH_KB_*` variables and a ticker; the ticker has no
+exchange suffix (`TD.TO` -> `TD`, see `app/peers.js`).
 
 Claude then writes the answer for the user, in Markdown (rendered safely by
-`app/public/markdown.js`), with a "Sources" section saying whether the data
-comes from the official earnings release (knowledge base) or from the web.
+`app/public/markdown.js`). Each fact from the report is cited inline as
+`[@Short name](url)`, shown as a small source button; the report numbers its
+sources S1, S2... and the review R1, R2.... A closing italic line says where
+the data comes from: knowledge base (official release or saved research),
+Bigdata.com or the web.
+
+The chat agent's tools are `research_company`, `find_similar_companies`,
+`get_portfolio_details` and `set_report_schedule` (automatic portfolio reports).
+It uses `AGENT_MODEL` (default Claude Opus 5.5) and `AGENT_EFFORT` (default
+`low`), at most 4 model turns per reply (`MAX_STEPS`), and retries a refused
+request on Claude Opus 4.8 (SDK refusal fallback).
 
 ```
 app/bot.js (Claude, formatting) --research_company--> AgentCore harness "research"
@@ -64,6 +75,13 @@ app/bot.js (Claude, formatting) --research_company--> AgentCore harness "researc
 ```
 
 ## Resources (created with the AWS CLI)
+
+Research exists only in the `andre` and prod environments; the others run
+without it. In the tables below, IDs are in parentheses or labelled, except
+the gateway and harnesses: their value is the ID, which is the name plus a
+generated suffix (gateway `datathon2026-equipe14-andre-research`, harness
+`datathon2026_equipe14_andre_research`). `scripts/deploy-app.sh` looks
+resources up by their bare name.
 
 ### Environment `andre`
 
@@ -104,7 +122,8 @@ The app reads its configuration from environment variables: `RESEARCH_HARNESS_AR
 `RESEARCH_REVIEWER_ARN` (peer review; unset = no review),
 `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` (where to save
 reports), `RESEARCH_GATEWAY_URL` (the gateway's MCP URL, for the daily market
-snapshot) and `BIGDATA_DAILY_CALLS` (budget, default 9):
+snapshot), `BIGDATA_DAILY_CALLS` (budget, default 9) and `RESEARCH_USAGE_FILE`
+(budget counter file, default next to `DATA_FILE`):
 
 - locally: in `.env-dev` (gitignored), loaded by `npm run dev`;
 - on the EC2: `scripts/deploy-app.sh` finds the `RESEARCH_*` values by name
@@ -134,7 +153,8 @@ same path under `metadata/` (`<file>.metadata.json`), with at least the
 ## Test
 
 ```bash
-# Knowledge base alone (filter on the symbol; ENB returns nothing)
+# Knowledge base alone (filter on the symbol; a symbol without an earnings
+# release or saved research report, under reports/<TICKER>/, returns nothing)
 aws bedrock-agent-runtime retrieve --knowledge-base-id RJ5TCZ4WGW \
   --retrieval-query text="quarterly revenue" \
   --retrieval-configuration '{"managedSearchConfiguration":{"numberOfResults":3,"filter":{"equals":{"key":"symbol","value":"MSFT"}}}}'
@@ -161,8 +181,8 @@ The harness has no AWS CLI invoke command (streaming API): use the app, or
     `find_securities` call, so only when the 3-call limit allows it).
 
   The tools that write to the Bigdata.com account (monitors, watchlists,
-  uploads) are not allowed. Both harnesses (andre and prod) have this prompt
-  and `maxIterations` 7.
+  uploads) are not allowed. Both research harnesses (andre and prod) have this
+  prompt and `maxIterations` 7 (the reviewers have 3).
 - **Daily market snapshot.** The market tearsheet is the same for every
   company, so when `RESEARCH_GATEWAY_URL` is set the app buys it once per UTC
   day itself (signed MCP call to the gateway, `bedrock-agentcore:InvokeGateway`,
@@ -190,7 +210,8 @@ The harness has no AWS CLI invoke command (streaming API): use the app, or
 
 The managed knowledge base, the gateway and the harness are billed per use
 (no idle cost apart from the few KB of S3 storage). Each research is one
-harness session (Claude Opus 5.5) plus a few web searches.
+harness session (Claude Opus 5.5) plus a few web searches and the Bigdata.com
+credits it uses (see above); a judgment request adds one reviewer session.
 
 ## Clean up
 

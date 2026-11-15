@@ -1,7 +1,7 @@
 'use strict';
 // Real news: RSS parsing, company matching, Comprehend enrichment, the
 // news-refresh job and the app's query. Database tests need TEST_DATABASE_URL
-// on a THROWAWAY database with db/migrations V1..V12 applied (they delete rows).
+// on a THROWAWAY database with all db/migrations applied (they delete rows).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseRss, cleanText, httpUrl } = require('../src/marketdata/news/rss');

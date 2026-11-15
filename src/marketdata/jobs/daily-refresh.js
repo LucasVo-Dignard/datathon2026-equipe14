@@ -1,8 +1,8 @@
 'use strict';
 // Daily refresh of the tracked symbols (table tracked_symbols).
 //
-// Runs once a day on AWS Batch (see infra-batch/), and locally against the
-// Docker Postgres:
+// Runs on weekdays at 18:00 (Toronto time) on AWS Batch (see infra-batch/),
+// and locally against the Docker Postgres:
 //
 //     DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
 //         node src/marketdata/jobs/daily-refresh.js [--symbols RY.TO NVDA]
@@ -14,9 +14,10 @@
 //
 // Finnhub steps run only if FINNHUB_API_KEY is set.
 //
-// When ALERTS_SENDER is set, price-move alerts are emailed (SES) after the
-// refresh (price-alerts.js), and the subscribers' holdings are refreshed too.
-// An alert failure is logged but never fails the job.
+// When ALERTS_SENDER is set, the subscribers' holdings are refreshed first,
+// then price-move alerts are emailed (SES, price-alerts.js), then the other
+// symbols are refreshed. With --symbols, alerts are still sent but holdings
+// are not refreshed first. An alert failure is logged but never fails the job.
 //
 // REFRESH_ENABLED=false turns the job into a no-op: it logs and exits 0
 // without connecting to the database or calling any provider. The AWS job
