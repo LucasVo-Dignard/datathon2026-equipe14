@@ -8,7 +8,17 @@ const { parseRss, cleanText, httpUrl } = require('../src/marketdata/news/rss');
 const { createMatcher, normalizeName } = require('../src/marketdata/news/match');
 const { analyze, docText } = require('../src/marketdata/news/enrich');
 const newsJob = require('../src/marketdata/jobs/news-refresh');
+const { isBlockedPublisher } = require('../src/marketdata/news/blocked');
 const { createNewsService, generalRelevance } = require('../app/news');
+
+test('AI-generated article publishers are blocked, real media are not', () => {
+  for (const name of ['Simply Wall St.', 'Simply Wall St. (via Yahoo Finance)', 'GuruFocus.com', 'Insider Monkey', 'TipRanks', 'Alpha Vantage', 'Benzinga']) {
+    assert.equal(isBlockedPublisher(name), true, name);
+  }
+  for (const name of ['Reuters', 'Bloomberg (via Yahoo Finance)', 'Yahoo Finance', 'Wall Street Journal', '', null]) {
+    assert.equal(isBlockedPublisher(name), false, String(name));
+  }
+});
 
 const rss = (items) => `<?xml version="1.0"?><rss version="2.0"><channel><title>Feed</title>${items}</channel></rss>`;
 const item = ({ title, link, date = 'Sat, 14 Nov 2026 07:11:29 EST', desc = '', guid }) => `<item>

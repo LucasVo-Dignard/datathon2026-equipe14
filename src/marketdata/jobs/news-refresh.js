@@ -7,11 +7,12 @@
 //
 // 1. Reads the RSS feeds of known media (news/feeds.js).
 // 2. Reads Yahoo Finance news for every symbol held in a portfolio; Yahoo
-//    says which tickers each article is about.
+//    says which tickers each article is about. Publishers of automated /
+//    AI-generated articles (Simply Wall St, ...) are skipped (news/blocked.js).
 // 3. New articles go through Amazon Comprehend: sentiment, and organizations
 //    -> linked companies (news/enrich.js, news/match.js). Articles stay in
 //    their original language.
-// 4. Articles older than 30 days are deleted.
+// 4. Articles older than 30 days, or from a blocked publisher, are deleted.
 //
 // Each source and each article fails on its own: an unreachable feed or an AWS
 // error is logged and retried on the next run. Exit code 1 only if nothing at
@@ -22,6 +23,7 @@ const { FEEDS } = require('../news/feeds');
 const { fetchFeed } = require('../news/rss');
 const { createMatcher } = require('../news/match');
 const { analyze } = require('../news/enrich');
+const { isBlockedPublisher } = require('../news/blocked');
 const { newYahooClient } = require('../refresh');
 
 const RETENTION_DAYS = 30;
@@ -85,6 +87,7 @@ async function readYahoo(db, { yahoo, now, log, report }) {
       for (const n of news) {
         if (!n.id || !n.title || !/^https?:\/\//.test(n.url || '') || Number.isNaN(n.publishedAt.getTime())) continue;
         if (tooOld(n.publishedAt, now)) continue;
+        if (isBlockedPublisher(n.publisher)) continue;
         const saved = await saveItem(db, {
           source: 'yahoo',
           sourceName: n.publisher ? `${n.publisher} (via Yahoo Finance)` : 'Yahoo Finance',
@@ -108,6 +111,15 @@ async function readYahoo(db, { yahoo, now, log, report }) {
     }
   }
   if (rows.length) log.info(`Yahoo Finance: news for ${rows.length} held symbols`);
+}
+
+// Articles stored before their publisher was blocked.
+async function purgeBlocked(db, { log }) {
+  const { rows } = await db.query("SELECT id, source_name FROM news_items WHERE source = 'yahoo'");
+  const ids = rows.filter((r) => isBlockedPublisher(r.source_name)).map((r) => r.id);
+  if (!ids.length) return;
+  await db.query('DELETE FROM news_items WHERE id = ANY($1::bigint[])', [ids]);
+  log.info(`${ids.length} articles from blocked publishers deleted`);
 }
 
 async function enrichPending(db, { comprehend, log, report }) {
@@ -168,6 +180,7 @@ async function main(argv = process.argv.slice(2), {
   try {
     await readFeeds(db, { feeds, fetchFn, now, log, report });
     await readYahoo(db, { yahoo: yahoo || newYahooClient(), now, log, report });
+    await purgeBlocked(db, { log });
     await enrichPending(db, { comprehend, log, report });
     const { rowCount } = await db.query(
       `DELETE FROM news_items WHERE published_at < now() - interval '${RETENTION_DAYS} days'`);

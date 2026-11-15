@@ -8,6 +8,9 @@
 // generalRelevance): local or human-interest stories from the feeds are left
 // out. Articles are shown in their original language (English or French).
 // Without a database, enabled = false and the portfolio keeps its sample news.
+// Publishers of automated / AI-generated articles are never shown (blocked.js).
+
+const { isBlockedPublisher } = require('../src/marketdata/news/blocked');
 
 const LINKED_LIMIT = 20;
 const PER_SYMBOL = 4; // so one very covered stock doesn't hide the others
@@ -95,6 +98,7 @@ function createNewsService({ pool } = {}) {
     const perSymbol = new Map();
     const picked = [];
     for (const r of linked) {
+      if (isBlockedPublisher(r.source_name)) continue;
       const key = r.symbols[0];
       const n = perSymbol.get(key) || 0;
       if (n >= PER_SYMBOL) continue;
