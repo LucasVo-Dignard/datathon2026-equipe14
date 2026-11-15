@@ -75,3 +75,21 @@ DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
 ```
 
 The API is slow and sometimes answers 502; the client retries.
+
+### Top companies by market cap
+
+`providers/companiesmarketcap` downloads the global ranking published by
+companiesmarketcap.com (one CSV, no key, market caps in USD, Yahoo-style
+symbols). `jobs/populate-top-companies.js` takes the top N, saves each Yahoo
+profile in `company_profiles` and adds the symbol to `tracked_symbols`.
+Symbols Yahoo doesn't know are skipped.
+
+```bash
+node src/marketdata/jobs/populate-top-companies.js --dry-run              # print the list only
+DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
+    node src/marketdata/jobs/populate-top-companies.js [--limit 1000] [--skip-existing]
+```
+
+This job allows 60 Yahoo calls a minute (the daily job: 30), so 1000 companies
+take about 17 minutes;
+`--skip-existing` resumes an interrupted run.

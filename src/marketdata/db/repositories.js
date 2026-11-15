@@ -31,6 +31,18 @@ async function activeSymbols(db) {
   return rows.map((r) => r.symbol);
 }
 
+// Follow symbols (or follow them again if they were deactivated).
+async function trackSymbols(db, symbols) {
+  await insertMany(db, 'tracked_symbols', ['symbol'], [...new Set(symbols)].map((s) => [s]),
+    'ON CONFLICT (symbol) DO UPDATE SET active = true');
+}
+
+// Symbols that already have a profile from `provider`.
+async function profiledSymbols(db, provider) {
+  const { rows } = await db.query('SELECT symbol FROM company_profiles WHERE provider = $1', [provider]);
+  return new Set(rows.map((r) => r.symbol));
+}
+
 // Record the outcome of a refresh. last_refreshed_at moves only on success,
 // so it always says how fresh the data really is.
 async function markRefreshed(db, symbol, error = null) {
@@ -192,6 +204,8 @@ async function macroObservations(db) {
 
 module.exports = {
   activeSymbols,
+  trackSymbols,
+  profiledSymbols,
   markRefreshed,
   saveProfile,
   savePriceBars,

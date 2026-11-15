@@ -49,8 +49,8 @@ function finnhubSteps(client, { today = localToday() } = {}) {
   ];
 }
 
-function newYahooClient() {
-  return new yahoo.YahooClient({ rateLimiter: new RateLimiter(YAHOO_CALLS_PER_MINUTE, 60_000) });
+function newYahooClient(callsPerMinute = YAHOO_CALLS_PER_MINUTE) {
+  return new yahoo.YahooClient({ rateLimiter: new RateLimiter(callsPerMinute, 60_000) });
 }
 
 // Yahoo steps, plus Finnhub's if FINNHUB_API_KEY is set.

@@ -19,4 +19,7 @@ COPY src ./src
 
 USER node
 ENV NODE_ENV=production
-ENTRYPOINT ["node", "src/marketdata/jobs/daily-refresh.js"]
+# Runs the daily refresh by default. Other jobs can be run by overriding the
+# command, e.g. ["src/marketdata/jobs/populate-top-companies.js", "--skip-existing"].
+ENTRYPOINT ["node"]
+CMD ["src/marketdata/jobs/daily-refresh.js"]
