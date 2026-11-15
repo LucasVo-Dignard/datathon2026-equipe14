@@ -11,6 +11,10 @@ Terraform that creates:
   the instance only and a lifecycle policy keeping the 10 latest images
 - an Elastic IP, so the public IP never changes
 - a generated SSH key (SSH stays closed unless `enable_ssh = true`)
+- a private S3 bucket for the simulated reports (`reports.tf`), read and written
+  by the web server only under `reports/`
+- web role permissions for the app: the reports bucket, and
+  `bedrock-mantle:CreateInference` for the agent (`iam.tf`)
 
 ## Security rules this follows
 
@@ -19,9 +23,9 @@ Terraform that creates:
 - **No credentials in Git.** `.env-aws`, `*.tfvars`, `*.pem` and
   `*.tfstate` are gitignored. The state contains the generated private key,
   so it lives only in the private S3 bucket (see below), never in Git.
-- **Private S3 only.** The one bucket (Terraform state) has all four Block
-  Public Access settings on, versioning, encryption, and a policy that
-  denies non-HTTPS access. No RDS or EMR resources.
+- **Private S3 only.** Both buckets (Terraform state, reports) have all four Block
+  Public Access settings on, encryption, and a policy that denies non-HTTPS
+  access (the state bucket also has versioning). No RDS or EMR resources.
 - **Minimal resources.** One small instance. Stop it or destroy it when idle.
 
 ## Remote state

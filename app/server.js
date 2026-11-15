@@ -8,7 +8,9 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { reply } = require('./bot');
+const { reply, report } = require('./bot');
+const reports = require('./reports');
+const { createReportStore } = require('./reports-store');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { createChatStore } = require('./chat-store');
@@ -59,6 +61,8 @@ const stocks = createStockLookup();
 const macro = createMacroLookup();
 const portfolioStore = createPortfolioStore({ db, saveDb });
 const portfolios = createPortfolioService({ store: portfolioStore, stocks, news: createNewsService({ pool: profiles.pool }) });
+// Rapports simulés : bucket S3 si REPORTS_BUCKET est défini, sinon le fichier JSON.
+const reportStore = createReportStore({ db, saveDb });
 
 // Alertes de prix par courriel (SES) : actives seulement avec Postgres et ALERTS_SENDER.
 const notifications = createNotificationsFromEnv({ pool: profiles.pool });
@@ -254,6 +258,58 @@ async function handleApi(req, res, pathname) {
     if (method === 'DELETE') return sendJson(res, 200, await portfolios.remove(user, symbol));
   }
 
+  if (pathname === '/api/reports') {
+    if (method === 'GET') return sendJson(res, 200, await reportStore.list(user));
+    // Simulated report: { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }.
+    if (method === 'POST') {
+      const { period } = await readJson(req);
+      if (!Object.hasOwn(reports.PERIODS, period)) throw new HttpError(400, 'Période invalide');
+      const portfolio = await portfolios.get(user);
+      if (!portfolio) throw new HttpError(409, 'Créez d’abord votre portefeuille (onglet Portefeuille)');
+      const investorProfile = await profiles.get(user).then((p) => p?.result || null, (err) => {
+        console.error('profile load error:', err.message);
+        return null;
+      });
+      // Period reports: each stock's own move since the start of the period.
+      const from = reports.periodFrom(portfolio, period);
+      const changes = {};
+      if (from) {
+        await Promise.all(portfolio.holdings.filter((h) => h.available).map(async (h) => {
+          changes[h.symbol] = await stocks.changeSince(h.symbol, from).catch((err) => {
+            console.error(`report change error (${h.symbol}):`, err.message);
+            return null;
+          });
+        }));
+      }
+      const brief = reports.buildBrief({ period, portfolio, profile: investorProfile, changes });
+      const highlights = reports.highlights(reports.analyze({ period, portfolio, changes }));
+      let content;
+      try {
+        content = await report({ label: reports.PERIODS[period].label, brief });
+      } catch (err) {
+        console.error('report error:', err);
+        throw new HttpError(502, "L'agent n'a pas pu rédiger le rapport, réessayez plus tard");
+      }
+      const entry = {
+        id: crypto.randomUUID(),
+        owner: user,
+        period,
+        title: reports.PERIODS[period].title,
+        asOf: portfolio.asOf,
+        createdAt: Date.now(),
+        highlights,
+        content: String(content),
+      };
+      return sendJson(res, 201, await reportStore.save(entry));
+    }
+  }
+
+  const reportMatch = pathname.match(/^\/api\/reports\/([0-9a-f-]{36})$/);
+  if (reportMatch && method === 'DELETE') {
+    if (!(await reportStore.remove(user, reportMatch[1]))) throw new HttpError(404, 'Rapport introuvable');
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (pathname === '/api/macro' && method === 'GET') {
     try {
       return sendJson(res, 200, await macro.overview());
@@ -392,6 +448,7 @@ const STATIC = {
   '/notifications-ui.js': ['notifications-ui.js', 'text/javascript; charset=utf-8'],
   '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
   '/macro.js': ['macro.js', 'text/javascript; charset=utf-8'],
+  '/reports.js': ['reports.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
@@ -447,7 +504,7 @@ const server = http.createServer(async (req, res) => {
 Promise.all([profiles.init(), chats.init(), portfolioStore.init()]).then(
   () => server.listen(PORT, () => console.log(
     `chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, conversations : ${chats.kind}, `
-    + `alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
+    + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
   (err) => {
     console.error('Impossible d\'initialiser le stockage (profils / conversations / portefeuilles) :', err.message || err.code || err);
     process.exit(1);

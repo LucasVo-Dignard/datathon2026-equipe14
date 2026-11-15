@@ -60,6 +60,7 @@ function setTab(tab) {
   }
   if (tab === 'portfolio') window.Dashboard.redraw();
   else if (tab === 'macro') window.Macro.load();
+  else if (tab === 'reports') window.Reports.load();
   else scrollMessages();
 }
 

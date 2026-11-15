@@ -151,7 +151,7 @@ function createPortfolioService({
     const holdings = record.holdings.map((h, i) => {
       const q = priced[i];
       if (!q) {
-        return { symbol: h.symbol, name: h.symbol, sector: null, currency: null, quantity: h.quantity, available: false,
+        return { symbol: h.symbol, name: h.symbol, sector: null, country: null, currency: null, quantity: h.quantity, available: false,
           price: null, prevClose: null, avgCost: null, marketValue: 0, cost: 0, gain: 0, gainPct: 0, dayChange: 0, dayChangePct: 0 };
       }
       const price = q.price * q.rate;
@@ -163,6 +163,7 @@ function createPortfolioService({
         symbol: h.symbol,
         name: q.name || h.symbol,
         sector: q.sector,
+        country: q.country || null,
         currency: q.currency,
         quantity: h.quantity,
         available: true,

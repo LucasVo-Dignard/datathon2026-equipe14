@@ -13,8 +13,10 @@ without a database) are in a JSON file.
   AgentCore research harness (earnings releases knowledge base, then web
   search), see `../agents/README.md`. Refusals fall back to Claude Opus 4.8.
   `AGENT_MODEL` / `AGENT_EFFORT` override the model and effort,
-  `RESEARCH_HARNESS_ARN` enables the research.
-- `public/markdown.js`: safe Markdown renderer for the answers (DOM nodes only, no HTML).
+  `RESEARCH_HARNESS_ARN` enables the research. `report()` writes the simulated
+  reports (see [Reports](#reports)).
+- `reports.js`: the data sheet the agent writes a report from.
+- `public/markdown.js`: safe Markdown renderer for the answers and reports (DOM nodes only, no HTML).
 - `chat-store.js`: conversation history (see [Conversations](#conversations)).
 - `profile.js`: investor profile. Guided questionnaire, risk scoring, matching with the
   case personas (Amira, Mateo, Robert), tensions and guardrails for the agents.
@@ -36,6 +38,9 @@ npm run dev   # http://localhost:3000, loads AWS credentials from .env-aws,
 ```
 
 Deployed to the EC2 by Terraform (see `../infra/README.md`).
+
+On the EC2, the agent uses the instance role, which allows
+`bedrock-mantle:CreateInference` (`infra/iam.tf`).
 
 ## Investor profile
 
@@ -98,10 +103,6 @@ Conversations already in an environment's JSON file are not copied to the databa
 Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**
 database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`.
 
-On the EC2, the Docker image installs the SDK (`npm ci`), but the instance role
-still needs `bedrock-mantle:CreateInference` (see `infra/iam.tf`): until then
-the agent answers with an error message.
-
 ## Portfolio
 
 The first time the user opens the Portefeuille tab, they choose how to start:
@@ -126,6 +127,35 @@ Storage works like profiles: with `DATABASE_URL`, tables `portfolios` and
 `portfolio_holdings` (migration `V7__create_portfolios.sql`, the server refuses to
 start without it). Otherwise `db.users[username].portfolio` in the JSON file.
 
+## Reports
+
+The Rapports tab simulates the report the client would receive: Quotidien,
+Hebdomadaire, Mensuel or Annuel. `reports.js` builds a data sheet for the period
+with **percentages and dates only** (no amounts, prices or quantities, so the
+report can't quote any): performance over the period from the portfolio history,
+high and low, gain since purchase, cash share, each holding's weight and its own
+price move over the period (`stocks.changeSince`: stored bars, else Yahoo) with
+its contribution; the last session only for a daily report. Also
+**regional exposure** (issuer country and region, and currency, cash counted in
+CAD), sector exposure, news about the client's stocks or sectors published
+during the period, and the investor profile with its guardrails. The issuer
+country comes from `company_profiles.country` (Yahoo); when it's missing it is
+guessed from the listing (`.TO` → Canada, plain USD symbol → United States, ...)
+and the sheet says so. `bot.report()` asks the agent to write the report from
+it in Markdown, rendered with `public/markdown.js`. The history and news are
+still fictional, so the report is too.
+
+API (logged-in user): `GET /api/reports` (newest first),
+`POST /api/reports { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }` (409 until
+the user has a portfolio), `DELETE /api/reports/:id`.
+
+Storage (`reports-store.js`, last 20 reports per user):
+
+- **`REPORTS_BUCKET` set** → private S3 bucket (`infra/reports.tf`), one JSON object
+  per report at `reports/<username>/<id>.json`. On the EC2, `scripts/deploy-app.sh`
+  writes `REPORTS_BUCKET` into `/etc/chatbot.env` from the Terraform output.
+- **not set** → the prototype JSON file (`db.reports`), like conversations.
+
 ## Price alerts by email
 
 `notifications.js` (API `/api/notifications`, card on the profile page) and the
@@ -136,3 +166,4 @@ in one trading day. The threshold follows the risk level (2 % Faible … 7 % Él
 `src/marketdata/alerts.js`. Sent with Amazon SES (see `infra/README.md`); tables
 `notification_subscriptions` and `price_alerts_sent` (migration V8). Needs
 Postgres and `ALERTS_SENDER`, otherwise the card says alerts are unavailable.
+
