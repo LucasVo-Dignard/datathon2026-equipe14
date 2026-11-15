@@ -66,10 +66,8 @@ Agent settings (environment variables):
 
 - `AGENT_MODEL` (default `anthropic.claude-opus-5-5`), `AGENT_EFFORT` (default `low`).
 - Research (top of `research.js`): `RESEARCH_HARNESS_ARN` (unset = no research),
-  `RESEARCH_REVIEWER_ARN` (peer review, unset = none), `BIGDATA_DAILY_CALLS` (daily
-  Bigdata.com call budget, default 9), `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`,
-  `RESEARCH_KB_DATA_SOURCE_ID` (where reports are saved), `RESEARCH_USAGE_FILE`
-  (budget counter), `RESEARCH_GATEWAY_URL` (daily market snapshot).
+  `RESEARCH_REVIEWER_ARN` (peer review, unset = none), `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`,
+  `RESEARCH_KB_DATA_SOURCE_ID` (where reports are saved), `RESEARCH_GATEWAY_URL` (daily market snapshot).
 
 ## Chat API
 

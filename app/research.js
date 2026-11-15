@@ -15,9 +15,7 @@
 // information), a second harness peer-reviews the data the research agent
 // selected: source quality, recency, balance, relevance and gaps.
 //
-// Bigdata.com credits are limited, so this module:
-//   - counts Bigdata.com tool calls per day and, once BIGDATA_DAILY_CALLS is
-//     reached, invokes the harness without the Bigdata.com tools;
+// Bigdata.com credits are paid for, so this module:
 //   - fetches the Bigdata.com market tearsheet (sectors, indexes, rates: the
 //     same for every company, about 17 credits, see ../agents/README.md) once
 //     per UTC day through the gateway, and gives it to the researches that need
@@ -29,13 +27,8 @@
 //   RESEARCH_HARNESS_ARN        harness to invoke (unset = research disabled)
 //   RESEARCH_REVIEWER_ARN       peer-review harness, used for judgment requests
 //                               only (unset = no review)
-//   BIGDATA_DAILY_CALLS         daily budget of Bigdata.com tool calls (default 9:
-//                               at least 3 researches of ~39 credits, 2 on days
-//                               the market snapshot is bought: it counts as one call)
 //   RESEARCH_KB_BUCKET, RESEARCH_KB_ID, RESEARCH_KB_DATA_SOURCE_ID
 //                               where to save reports (unset = not saved)
-//   RESEARCH_USAGE_FILE         budget counter file (default: next to DATA_FILE);
-//                               the daily market snapshot is saved next to it
 //   RESEARCH_GATEWAY_URL        MCP URL of the harness's gateway, for the daily
 //                               market snapshot (unset = each research calls
 //                               the market tearsheet itself)
@@ -49,19 +42,14 @@ const { BedrockAgentCoreClient, InvokeHarnessCommand } = require('@aws-sdk/clien
 const HARNESS_ARN = process.env.RESEARCH_HARNESS_ARN || '';
 const REVIEWER_ARN = process.env.RESEARCH_REVIEWER_ARN || '';
 const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
-const DAILY_BUDGET = Number(process.env.BIGDATA_DAILY_CALLS ?? 9);
-// The harness prompt allows at most 3 Bigdata.com calls per research (the third
-// one only for sector, market or economic context).
-const CALLS_PER_RESEARCH = 3;
 const KB = {
   bucket: process.env.RESEARCH_KB_BUCKET || '',
   id: process.env.RESEARCH_KB_ID || '',
   dataSourceId: process.env.RESEARCH_KB_DATA_SOURCE_ID || '',
 };
-const USAGE_FILE = process.env.RESEARCH_USAGE_FILE
-  || path.join(path.dirname(process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json')), 'bigdata-usage.json');
 const GATEWAY_URL = process.env.RESEARCH_GATEWAY_URL || '';
-const MARKET_FILE = path.join(path.dirname(USAGE_FILE), 'bigdata-market.json');
+const MARKET_FILE = path.join(
+  path.dirname(process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json')), 'bigdata-market.json');
 // Sections of the market tearsheet given to the researches ("## part / ### section"):
 // about a third of the whole tearsheet (30,000 characters), to bound the prompt.
 const MARKET_SECTIONS = [
@@ -93,48 +81,6 @@ const getClient = () => (client ??= new BedrockAgentCoreClient({ region: REGION 
 
 const isEnabled = () => Boolean(HARNESS_ARN);
 const today = () => new Date().toISOString().slice(0, 10);
-
-// ---------------------------------------------------------------------------
-// Daily Bigdata.com budget
-// ---------------------------------------------------------------------------
-
-function readUsage() {
-  try {
-    const usage = JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8'));
-    if (usage.date === today()) return usage;
-  } catch {
-    // Missing or unreadable file: start a new day.
-  }
-  return { date: today(), calls: 0 };
-}
-
-function addUsage(calls) {
-  if (!calls) return;
-  const usage = readUsage();
-  usage.calls += calls;
-  try {
-    fs.mkdirSync(path.dirname(USAGE_FILE), { recursive: true });
-    fs.writeFileSync(USAGE_FILE, JSON.stringify(usage));
-  } catch (err) {
-    console.error('bigdata usage file:', err.message);
-  }
-}
-
-// Calls reserved by the researches in progress: parallel researches (one per
-// company of a judgment request) must not all pass the budget check at once.
-let reserved = 0;
-
-function bigdataStatus() {
-  const { calls } = readUsage();
-  return { calls, reserved, budget: DAILY_BUDGET, available: calls + reserved + CALLS_PER_RESEARCH <= DAILY_BUDGET };
-}
-
-// Reserves one research's worth of Bigdata.com calls, if the budget allows it.
-function reserveBigdata() {
-  if (!bigdataStatus().available) return false;
-  reserved += CALLS_PER_RESEARCH;
-  return true;
-}
 
 // ---------------------------------------------------------------------------
 // Daily market snapshot (Bigdata.com market tearsheet)
@@ -219,22 +165,18 @@ let marketFetch = null;
 
 /**
  * Returns today's market snapshot { date, text, fetched } (fetched: bought by
- * this call), or null when it is not configured, the budget is used up or the
- * call failed: the research then goes on without it.
+ * this call), or null when it is not configured or the call failed: the
+ * research then goes on without it.
  */
 async function marketSnapshot() {
   if (!GATEWAY_URL) return null;
   const saved = readMarketFile();
   if (saved) return { ...saved, fetched: false };
   if (marketFetch) return marketFetch;
-  const { calls } = readUsage();
-  if (calls + reserved + 1 > DAILY_BUDGET) return null;
 
-  reserved += 1;
   marketFetch = (async () => {
     try {
       const text = marketExtract(await callGatewayTool('bigdata___bigdata_market_tearsheet'));
-      addUsage(1);
       if (!text) return null;
       const snapshot = { date: today(), text };
       try {
@@ -248,7 +190,6 @@ async function marketSnapshot() {
       console.error('market snapshot:', err.message);
       return null;
     } finally {
-      reserved -= 1;
       marketFetch = null;
     }
   })();
@@ -340,7 +281,7 @@ async function runHarness(harnessArn, prompt, extra = {}, onTool = null) {
 }
 
 /**
- * Runs one research and returns { report, tools, usedBigdata, saved, market }.
+ * Runs one research and returns { report, tools, bigdataCalls, saved, market }.
  * onTool(name) is called each time the agent calls a tool (progress display).
  * kind is "factual" or "judgment": for a judgment, the research agent is asked
  * for a balanced selection (arguments for and against).
@@ -352,7 +293,6 @@ async function researchCompany({ company, ticker, question, kind = 'factual', ma
   if (!isEnabled()) throw new Error('RESEARCH_HARNESS_ARN is not set');
   const subject = ticker ? `${company} (${ticker})` : company;
   const market = marketContext || kind === 'judgment' ? await marketSnapshot() : null;
-  const withBigdata = reserveBigdata();
   const balance = kind === 'judgment'
     ? '\nThe investor is asking for a judgment on a proposal: collect balanced data, with the facts that support it and those that argue against it (risks, valuation, competition).'
     : '';
@@ -361,29 +301,19 @@ async function researchCompany({ company, ticker, question, kind = 'factual', ma
       + 'use it for sector and market context instead of bigdata___bigdata_market_tearsheet, and cite it as '
       + `"Bigdata.com | no URL | Market tearsheet, ${market.date}"):\n${market.text}`
     : '';
-  // Without a reservation (budget used up), the agent gets no Bigdata.com tool
-  // until tomorrow. With the daily snapshot configured, it never buys the
-  // market tearsheet itself.
-  let allowedTools = null;
-  if (!withBigdata) allowedTools = TOOLS_WITHOUT_BIGDATA;
-  else if (GATEWAY_URL) allowedTools = ALL_TOOLS.filter((tool) => tool !== MARKET_TOOL);
+  // With the daily snapshot configured, the agent never buys the market
+  // tearsheet itself.
+  const allowedTools = GATEWAY_URL ? ALL_TOOLS.filter((tool) => tool !== MARKET_TOOL) : null;
 
-  let run;
-  try {
-    // The harness has no clock: give it today's date so "latest" is resolved correctly.
-    run = await runHarness(
-      HARNESS_ARN,
-      `Today's date: ${today()}\nCompany: ${subject}\nQuestion: ${question}${balance}${marketText}`,
-      allowedTools ? { allowedTools } : {},
-      onTool,
-    );
-  } finally {
-    if (withBigdata) reserved -= CALLS_PER_RESEARCH;
-  }
-  const { text: report, tools, stopReason } = run;
+  // The harness has no clock: give it today's date so "latest" is resolved correctly.
+  const { text: report, tools, stopReason } = await runHarness(
+    HARNESS_ARN,
+    `Today's date: ${today()}\nCompany: ${subject}\nQuestion: ${question}${balance}${marketText}`,
+    allowedTools ? { allowedTools } : {},
+    onTool,
+  );
 
   const bigdataCalls = tools.filter((name) => name.startsWith('bigdata___')).length;
-  addUsage(bigdataCalls);
   if (!report) throw new Error(`research harness returned no report (stop: ${stopReason})`);
 
   let saved = false;
@@ -395,7 +325,7 @@ async function researchCompany({ company, ticker, question, kind = 'factual', ma
     }
   }
   return {
-    report, tools, stopReason, usedBigdata: bigdataCalls > 0, bigdataBudget: bigdataStatus(), saved,
+    report, tools, stopReason, bigdataCalls, saved,
     market: market ? (market.fetched ? 'fetched' : 'cache') : null,
   };
 }
@@ -429,4 +359,4 @@ async function reviewResearch({ proposal, reports, portfolio = '', onTool = null
   return { review, tools };
 }
 
-module.exports = { researchCompany, reviewResearch, marketSnapshot, marketExtract, isEnabled, isReviewEnabled, bigdataStatus };
+module.exports = { researchCompany, reviewResearch, marketSnapshot, marketExtract, isEnabled, isReviewEnabled };

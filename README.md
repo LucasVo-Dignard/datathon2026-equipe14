@@ -70,13 +70,11 @@ IAM), dans l'ordre :
    recherche ;
 3. la recherche web d'AgentCore, en dernier recours.
 
-**Crédits Bigdata.com limités.**
-- Budget quotidien (`BIGDATA_DAILY_CALLS`, 9 appels par défaut) : une fois atteint,
-  la recherche continue sans Bigdata.com jusqu'au lendemain.
-- La vue de marché Bigdata.com (secteurs, indices, taux) est achetée une fois par jour
-  et partagée entre les recherches.
+**Économie des crédits Bigdata.com** (chaque appel est payant) :
+- La vue de marché Bigdata.com (secteurs, indices, taux) est récupérée une seule fois
+  par jour, puis réutilisée par toutes les recherches.
 - Chaque rapport qui a utilisé Bigdata.com est versé dans la base de connaissances,
-  pour que la même question soit gratuite la fois suivante.
+  pour que la même question soit moins coûteuse la fois suivante.
 
 **Pas encore dans Terraform.** Les ressources des agents ont été créées à la main
 avec la CLI AWS, dans l'environnement `andre` et en prod :
@@ -167,8 +165,7 @@ prod, dans le même compte AWS. `TF_WORKSPACE` le choisit pour Terraform,
 **Variables de l'app et des jobs.** Sur AWS, la plupart sont posées
 automatiquement : le script `chatbot-db-env` de l'EC2 construit `DATABASE_URL` depuis
 RDS et Secrets Manager, Terraform et `scripts/deploy-app.sh` remplissent
-`/etc/chatbot.env`, et Terraform la définition du job. `BIGDATA_DAILY_CALLS` se règle
-à la main dans `/etc/chatbot.env`, `AGENT_*` gardent leurs valeurs par défaut et
+`/etc/chatbot.env`, et Terraform la définition du job. `AGENT_*` gardent leurs valeurs par défaut et
 `FINNHUB_API_KEY` n'est pas définie sur AWS. En local, elles sont toutes optionnelles.
 
 | Variable | Défaut | Effet |
@@ -182,8 +179,7 @@ RDS et Secrets Manager, Terraform et `scripts/deploy-app.sh` remplissent
 | `RESEARCH_HARNESS_ARN` | non défini → recherche désactivée | Agent de recherche AgentCore (voir [Agents](#agents)) |
 | `RESEARCH_REVIEWER_ARN` | non défini → pas de relecture | Agent relecteur |
 | `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` | non définis → rapports non versés | Où verser les rapports de recherche dans la base de connaissances |
-| `RESEARCH_GATEWAY_URL` | non défini → pas de vue de marché partagée | Gateway de l'agent, pour acheter la vue de marché une fois par jour |
-| `BIGDATA_DAILY_CALLS`, `RESEARCH_USAGE_FILE` | `9`, fichier à côté de `DATA_FILE` | Budget quotidien Bigdata.com et fichier qui le compte |
+| `RESEARCH_GATEWAY_URL` | non défini → pas de vue de marché partagée | Gateway de l'agent, pour récupérer la vue de marché une fois par jour |
 | `REPORTS_BUCKET` | non défini → fichier JSON | Stockage des rapports sur S3 |
 | `ALERTS_SENDER`, `SES_CONFIGURATION_SET` | non définis → alertes désactivées | Expéditeur SES vérifié. Seul `ALERTS_SENDER` active les alertes |
 | `APP_URL` | non défini → liens relatifs | Adresse de l'app dans les courriels (sans elle, les liens ne marchent pas) |

@@ -336,11 +336,11 @@ async function runTool(block, progress, ctx) {
   progress(id, label, 'active');
   const onTool = sourceTrail((trail) => progress(id, label, 'active', trail));
   try {
-    const { report, tools, bigdataBudget, saved, market } = await research.researchCompany({ ...input, onTool });
+    const { report, tools, bigdataCalls, saved, market } = await research.researchCompany({ ...input, onTool });
     const trail = [...new Set(tools.map(sourceLabel).filter(Boolean))].join(' → ');
     progress(id, label, 'done', trail ? `${trail} · rapport reçu` : 'rapport reçu');
     console.log(`research ${input.ticker || input.company} (${input.kind}): tools=${tools.join(',')} `
-      + `bigdata=${bigdataBudget.calls}/${bigdataBudget.budget} market=${market || 'no'} saved=${saved}`);
+      + `bigdata=${bigdataCalls} market=${market || 'no'} saved=${saved}`);
     return {
       result: { type: 'tool_result', tool_use_id: block.id, content: report },
       research: { ...input, subject: input.ticker ? `${input.company} (${input.ticker})` : input.company, report },

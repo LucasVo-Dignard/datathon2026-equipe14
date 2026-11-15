@@ -80,7 +80,7 @@ docker buildx build --platform linux/amd64 \
 echo "==> Restart the app on $INSTANCE_ID (pulls the new image)"
 # REPORTS_BUCKET and the research settings are (re)written in /etc/chatbot.env
 # on every deploy, so a replaced instance gets them back too. Other lines
-# (alerts, BIGDATA_DAILY_CALLS...) are left as they are.
+# (alerts...) are left as they are.
 SET_ENV="sed -i '/^REPORTS_BUCKET=/d' /etc/chatbot.env"
 if [ -n "$REPORTS_BUCKET" ]; then
   SET_ENV="$SET_ENV && echo REPORTS_BUCKET=$REPORTS_BUCKET >> /etc/chatbot.env"
