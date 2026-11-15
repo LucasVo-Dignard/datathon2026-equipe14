@@ -4,7 +4,7 @@
 # so no host or password is ever committed:
 #   FLYWAY_URL       jdbc:postgresql://<host>:5432/marketdata
 #   FLYWAY_USER      bncd_admin
-#   FLYWAY_PASSWORD  from Secrets Manager (see db/README.md)
+#   FLYWAY_PASSWORD  from Secrets Manager (see README.md)
 
 [flyway]
 locations = ["filesystem:migrations"]

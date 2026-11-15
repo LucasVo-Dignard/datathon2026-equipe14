@@ -46,7 +46,7 @@ function createPgStore({ connectionString }) {
     async init() {
       const { rows: [r] } = await pool.query("SELECT to_regclass('users') AS u, to_regclass('sessions') AS s");
       if (!r.u || !r.s) {
-        throw new Error('tables users / sessions absentes : appliquez les migrations Flyway (voir db/README.md)');
+        throw new Error('tables users / sessions absentes : appliquez les migrations Flyway (voir README.md)');
       }
     },
     async login(username, token) {

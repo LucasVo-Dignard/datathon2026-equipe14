@@ -2,7 +2,7 @@
 // Database tests.
 //
 // The connection and job-switch tests always run. The repository and refresh
-// tests need a Postgres with the Flyway migrations applied (see db/README.md)
+// tests need a Postgres with the Flyway migrations applied (see README.md)
 // and run only when TEST_DATABASE_URL is set, e.g.:
 //
 //     TEST_DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm test

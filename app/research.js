@@ -9,7 +9,7 @@
 //   2. Bigdata.com (premium financial data, limited credits);
 //   3. the AgentCore Web Search Tool.
 // It returns a factual report with its sources; bot.js then formats the
-// answer for the user. See ../agents/README.md.
+// answer for the user. See ../README.md.
 //
 // For judgment requests only (an opinion on a proposal, not objective
 // information), a second harness peer-reviews the data the research agent
@@ -17,7 +17,7 @@
 //
 // Bigdata.com credits are paid for, so this module:
 //   - fetches the Bigdata.com market tearsheet (sectors, indexes, rates: the
-//     same for every company, about 17 credits, see ../agents/README.md) once
+//     same for every company, about 17 credits, see ../README.md) once
 //     per UTC day through the gateway, and gives it to the researches that need
 //     market context instead of letting each of them buy it;
 //   - saves every report that used Bigdata.com to the knowledge base, so the
@@ -63,7 +63,7 @@ const MARKET_SECTIONS = [
   'Equity Factors / Size & Style (Relative to S&P 500)',
 ];
 
-// Tool selectors of the harness (same as its allowedTools, see agents/README.md).
+// Tool selectors of the harness (same as its allowed_tools, see infra-agents/harnesses.tf).
 const TOOLS_WITHOUT_BIGDATA = ['@research/earnings-kb___Retrieve', '@research/web-search___WebSearch'];
 const MARKET_TOOL = '@research/bigdata___bigdata_market_tearsheet';
 const BIGDATA_TOOLS = [

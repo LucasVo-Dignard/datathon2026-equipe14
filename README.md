@@ -48,9 +48,10 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | **Amazon SES** | Alertes de prix par courriel |
 | **S3** | État Terraform, rapports, paquets de migration. Tous privés |
 
-L'infrastructure est décrite en Terraform, dans trois stacks à appliquer dans cet
-ordre : `infra/` (réseau, EC2, ECR, SES, S3), `infra-db/` (RDS) et `infra-batch/`
-(jobs). Chaque stack garde son tfstate dans un bucket S3 privé, avec un verrou.
+L'infrastructure est décrite en Terraform, dans quatre stacks à appliquer dans cet
+ordre : `infra/` (réseau, EC2, ECR, SES, S3), `infra-db/` (RDS), `infra-batch/`
+(jobs) et `infra-agents/` (agents AgentCore). Chaque stack garde son tfstate dans un
+bucket S3 privé, avec un verrou.
 
 ## Agents
 
@@ -76,14 +77,28 @@ IAM), dans l'ordre :
 - Chaque rapport qui a utilisé Bigdata.com est versé dans la base de connaissances,
   pour que la même question soit moins coûteuse la fois suivante.
 
-**Pas encore dans Terraform.** Les ressources des agents ont été créées à la main
-avec la CLI AWS, dans l'environnement `andre` et en prod :
+**Dans Terraform** (`infra-agents/`, prod seulement pour l'instant) :
 - un bucket S3 privé et une base de connaissances Bedrock, avec sa source de données ;
 - la Gateway, avec trois cibles : la base de connaissances, la recherche web, et
   Bigdata.com, limitée à 6 requêtes par minute, avec une clé lue dans Secrets Manager
   par AgentCore Identity ;
-- les deux harnesses, `research` et `reviewer` ;
+- les deux harnesses, `research` et `reviewer`, dont les prompts sont dans
+  `agents/prompts/` ;
 - leurs rôles IAM.
+
+**La clé Bigdata.com se met à la main.** Terraform crée le secret
+`<préfixe>/bigdata-api-key`, mais jamais sa valeur, pour qu'elle ne soit ni dans Git
+ni dans l'état Terraform. Dans un nouvel environnement, il faut la verser avant le
+premier `apply` complet :
+
+```bash
+terraform -chdir=infra-agents apply -target=aws_secretsmanager_secret.bigdata
+aws secretsmanager put-secret-value --secret-id <préfixe>/bigdata-api-key \
+  --secret-string '{"api_key":"<clé Bigdata.com>"}'
+terraform -chdir=infra-agents apply
+```
+
+La même commande `put-secret-value` sert à changer la clé.
 
 L'app les trouve par les variables `RESEARCH_*`. Sur l'EC2, `scripts/deploy-app.sh`
 retrouve ces ressources par leur nom et écrit les variables dans `/etc/chatbot.env` à
@@ -149,9 +164,20 @@ intégral, et les articles de plus de 30 jours sont supprimés. Conditions :
 | `.env-aws` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_DEFAULT_REGION=us-east-1` (jeton temporaire, à renouveler) |
 | `.env-dev` | `TF_WORKSPACE=<ton nom>`, qui choisit ton environnement pour Terraform, les migrations et les scripts (copie de `.env-dev.example`) |
 
+Linux et macOS (bash ou zsh) :
+
 ```bash
 set -a; source .env-aws; source .env-dev; set +a
 ```
+
+Windows (invite de commandes `cmd`) :
+
+```bat
+for %f in (.env-aws .env-dev) do @for /f "usebackq eol=# tokens=1,* delims==" %a in ("%f") do @set "%a=%b"
+```
+
+Les variables ne valent que pour le terminal ouvert : relance la commande dans chaque
+nouveau terminal, et après avoir renouvelé `.env-aws`.
 
 **Variables de l'app et des jobs.** Sur AWS, la plupart sont posées
 automatiquement : le script `chatbot-db-env` de l'EC2 construit `DATABASE_URL` depuis
@@ -242,7 +268,8 @@ Après le premier `apply` d'`infra`, SES envoie un lien de vérification à l'ad
 expéditrice de l'environnement (`datathon2026.equipe14+<env>@gmail.com`). Il faut
 cliquer dessus une fois pour que les alertes partent.
 
-Les ressources des agents se créent à part, avec la CLI AWS (voir [Agents](#agents)).
+Les agents (`infra-agents/`) se créent après, avec la clé Bigdata.com à verser dans
+Secrets Manager (voir [Agents](#agents)), puis un nouveau `./scripts/deploy-app.sh`.
 
 ### 5. Mettre à jour un environnement
 

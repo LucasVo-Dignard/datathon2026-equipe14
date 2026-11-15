@@ -51,12 +51,13 @@ creates or deletes AWS resources.
 - Load credentials in Git Bash: `set -a; source .env-aws; source .env-dev; set +a`
   (temporary session token: reload when it expires).
 - Region: `us-east-1`.
-- Infrastructure is Terraform, in three stacks with separate states:
+- Infrastructure is Terraform, in four stacks with separate states:
   `infra/` (VPC, EC2 web server, ECR, SES, reports bucket, Bedrock/AgentCore
-  IAM), `infra-db/` (private RDS) and `infra-batch/` (scheduled jobs on AWS
-  Batch Fargate: daily refresh, news, scheduled reports). See each folder's
-  README. Apply in that order; destroy in reverse (`infra-batch/` first).
-- Environments (see `ENVIRONMENTS.md`): prod is the `default` Terraform
+  IAM), `infra-db/` (private RDS), `infra-batch/` (scheduled jobs on AWS
+  Batch Fargate: daily refresh, news, scheduled reports) and `infra-agents/`
+  (AgentCore research agents, prod only for now). See README.md. Apply in that
+  order; destroy in reverse (`infra-agents/` first).
+- Environments (see `infra/env.tf`): prod is the `default` Terraform
   workspace; each developer has their own (`lucas`, `andre`, `youcef`), with
   its own VPC, EC2, RDS and Batch job, selected by `TF_WORKSPACE` in
   `.env-dev`. Work in a dev environment by default. Prod needs
@@ -85,7 +86,7 @@ creates or deletes AWS resources.
   work does not run on the EC2 web server.
 - Schema changes go only through Flyway migrations in `db/migrations/`
   (`V<n>__<description>.sql`). Never edit a migration that has been applied;
-  add a new one. See `db/README.md`.
+  add a new one. See README.md.
 - Test migrations locally first: `cd db && docker compose up -d postgres &&
   docker compose run --rm flyway migrate`.
 - Apply them to RDS with `python db/migrate.py` (runs Flyway on the web

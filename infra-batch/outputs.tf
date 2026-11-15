@@ -4,7 +4,7 @@ output "ecr_repository_url" {
 }
 
 output "job_queue" {
-  description = "Batch job queue (for a manual run, see README.md)."
+  description = "Batch job queue (for a manual run: aws batch submit-job)."
   value       = aws_batch_job_queue.main.name
 }
 

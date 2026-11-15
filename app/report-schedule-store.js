@@ -73,7 +73,7 @@ function createPgStore({ connectionString, pool: shared }) {
       const { rows } = await pool.query(
         "SELECT to_regclass('report_preferences') AS p, to_regclass('report_schedules') AS s");
       if (!rows[0].p || !rows[0].s) {
-        throw new Error('tables report_preferences / report_schedules absentes : appliquez les migrations Flyway (voir db/README.md)');
+        throw new Error('tables report_preferences / report_schedules absentes : appliquez les migrations Flyway (voir README.md)');
       }
     },
     async get(username) {

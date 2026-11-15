@@ -3,7 +3,7 @@
 //
 // Two modes, so the same code runs locally and on AWS:
 //
-// - DATABASE_URL set (local Docker Postgres, see db/README.md, or the web
+// - DATABASE_URL set (local Docker Postgres, see README.md, or the web
 //   server's /run/chatbot/db.env, written by chatbot-db-env at startup, see
 //   infra/user_data.sh.tftpl):
 //       DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata

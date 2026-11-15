@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Running Flyway migrations on RDS (see ../db/README.md).
+# Running Flyway migrations on RDS (see ../db/migrate.py).
 #
 # db/migrate.py uploads db/ as a bundle to this bucket, then asks the web
 # server (through SSM) to download it and run Flyway against the database.
