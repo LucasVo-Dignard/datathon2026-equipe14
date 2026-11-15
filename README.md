@@ -144,10 +144,6 @@ intégral, et les articles de plus de 30 jours sont supprimés. Conditions :
 
 ## Configuration
 
-**Identifiants : jamais dans Git.** Tous les fichiers `.env*` sont ignorés par Git,
-sauf le modèle `.env-dev.example`. Dans les dossiers `infra*/`, `*.tfvars`,
-`*.tfstate` et `*.pem` le sont aussi.
-
 | Fichier | Contenu |
 | --- | --- |
 | `.env-aws` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_DEFAULT_REGION=us-east-1` (jeton temporaire, à renouveler) |
@@ -156,11 +152,6 @@ sauf le modèle `.env-dev.example`. Dans les dossiers `infra*/`, `*.tfvars`,
 ```bash
 set -a; source .env-aws; source .env-dev; set +a
 ```
-
-**Environnements.** Chaque développeur a le sien (VPC, EC2, RDS, jobs), en plus de la
-prod, dans le même compte AWS. `TF_WORKSPACE` le choisit pour Terraform,
-`db/migrate.py` et les scripts. Sans elle, rien ne touche la prod : Terraform exige
-`-var confirm_prod=true` et les scripts refusent de tourner.
 
 **Variables de l'app et des jobs.** Sur AWS, la plupart sont posées
 automatiquement : le script `chatbot-db-env` de l'EC2 construit `DATABASE_URL` depuis
