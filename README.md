@@ -1,5 +1,7 @@
 # COURTIAGE DIRECT : équipe 14 (Datathon 2026)
 
+⚠️ Le site (http://52.54.33.119/) n'est disponible que sur le wifi de poly, pour éviter des abus du modèle IA. Si vous souhaitez y accéder autrement, s'il vous plait contactez nous (email poly par exemple).
+
 Outil d'information pour les clients de Banque Nationale Courtage Direct qui ont
 peu de temps ou peu de connaissances en placement. Il comprend :
 - un **profil investisseur** guidé ;
