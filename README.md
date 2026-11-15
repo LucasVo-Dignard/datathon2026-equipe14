@@ -54,7 +54,8 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | Service | Rôle |
 | --- | --- |
 | **EC2**, **ECR** | Serveur web. L'app tourne dans un conteneur tiré d'un dépôt ECR privé |
-| **RDS PostgreSQL 17** | Données de marché, profils, portefeuilles, conversations, alertes, news. Base privée, mot de passe dans **Secrets Manager** |
+| **RDS PostgreSQL 17** | Données de marché, profils, portefeuilles, conversations, alertes, news. Base privée |
+| **Secrets Manager** | Mot de passe de RDS, généré et renouvelé par RDS, et lu au démarrage par le serveur et par les jobs sans jamais être écrit sur disque. Clé API Bigdata.com de l'agent de recherche |
 | **AWS Batch (Fargate)** + **EventBridge Scheduler** | Mise à jour quotidienne des données et des alertes, et des news toutes les 2 h |
 | **Amazon Bedrock** + **Bedrock AgentCore** | Agent conversationnel (Claude), recherche, base de connaissances (communiqués de résultats), relecture |
 | **Amazon Comprehend** | Ton des articles et sociétés nommées, pour rattacher les news aux titres |
