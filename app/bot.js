@@ -18,7 +18,10 @@
 //                Son résumé (profileSummary) est ajouté au prompt système ;
 //                profile.guardrails et profile.tensions servent aux contrôles.
 //   - portfolio: le portefeuille du client (voir portfolio.js : summary, holdings, history),
-//                ou null s'il n'a pas encore choisi comment le créer ; pas encore utilisé
+//                ou null s'il n'a pas encore choisi comment le créer. Enrichi avec
+//                la base (secteur, industrie, pays) par portfolio-context.js : un
+//                résumé est ajouté au prompt système, le détail est donné par
+//                l'outil get_portfolio_details.
 // et retourne le texte de la réponse, en Markdown.
 //
 // Identifiants AWS : en local, ceux de .env-aws (chargés par `npm run dev`) ;
@@ -31,6 +34,7 @@ const { betaRefusalFallbackMiddleware, BetaFallbackState } = require('@anthropic
 const { profileSummary } = require('./profile');
 const research = require('./research');
 const peers = require('./peers');
+const portfolioContext = require('./portfolio-context');
 
 const MODEL = process.env.AGENT_MODEL || 'anthropic.claude-opus-5-5';
 // Claude Opus 5.5 defaults to medium; low keeps chat replies fast.
@@ -46,6 +50,13 @@ Tu connais le profil investisseur du client (ci-dessous) : adapte tes explicatio
 Tu ne donnes pas de conseil financier personnalisé : tu expliques les notions, les options et les risques pour que le client décide lui-même.
 
 Recherche : quand la question porte sur une entreprise précise (résultats trimestriels, chiffres, actualités récentes, perspectives), appelle l'outil research_company avant de répondre, une fois par entreprise. Ne l'appelle pas pour une question générale (une notion, une définition) ni quand la conversation contient déjà l'information. Base les chiffres de ta réponse sur le rapport de recherche, sans en inventer ; si le rapport ne trouve pas une information, dis-le. Si l'outil n'est pas disponible ou échoue, dis que tu n'as pas pu vérifier les données récentes et réponds avec ce que tu sais de façon générale.
+
+Portefeuille du client : son résumé (positions, poids, secteurs, garde-fous) figure ci-dessous et il est à jour.
+- Utilise-le dès que la question touche à ce que le client détient (« mon portefeuille », « mes actions », diversification, exposition, performance). Pour l'industrie, le pays, la devise ou le gain de chaque position, ou le détail des garde-fous, appelle get_portfolio_details.
+- Signale de toi-même un garde-fou dépassé quand c'est pertinent (par exemple un secteur au-dessus de sa limite), avec les chiffres.
+- Pour une proposition d'achat, de vente ou de remplacement, indique l'effet sur le portefeuille (poids des positions et du secteur concerné, nombre de positions).
+- Pour des entreprises similaires, précise celles que le client détient déjà.
+- Les valeurs du portefeuille sont en CAD ; l'historique de performance est fictif (prototype) : ne le présente pas comme réel. Ne cite pas de bouton de source pour les données du portefeuille.
 
 Entreprises similaires : quand le client demande des entreprises similaires, des alternatives, des concurrents ou des comparables à une entreprise (même secteur, même industrie, même pays…) :
 1. appelle d'abord find_similar_companies (filtre de pays si le client le précise) ; ne propose que des entreprises qu'il renvoie, jamais de mémoire ;
@@ -133,6 +144,18 @@ const SIMILAR_TOOL = {
   },
 };
 
+const PORTFOLIO_TOOL = {
+  name: 'get_portfolio_details',
+  description:
+    'Full view of the logged-in client\'s portfolio: every position with quantity, value and gain in CAD, weight, ' +
+    'sector, industry and country (from the market database); breakdowns by sector, industry, country and listing ' +
+    'currency; the check of the investor profile\'s guardrails (largest sector, number of assets, crypto share, ' +
+    'excluded activities); fictional performance history. Fast, no parameters. Call it for questions about the ' +
+    'client\'s own portfolio that the summary in the system prompt does not answer (diversification, concentration, ' +
+    'exposure, gains per position, guardrails).',
+  input_schema: { type: 'object', properties: {}, additionalProperties: false },
+};
+
 let client = null;
 function getClient() {
   // Created on first use so the server starts even without AWS credentials.
@@ -197,9 +220,17 @@ function sourceTrail(update) {
 
 // Returns { result, research } where result is the tool_result block and
 // research the successful report (null on error).
-async function runTool(block, progress) {
+async function runTool(block, progress, ctx) {
   const fail = (content) => ({ result: { type: 'tool_result', tool_use_id: block.id, is_error: true, content }, research: null });
   if (block.name === 'find_similar_companies') return runSimilar(block, progress, fail);
+  if (block.name === 'get_portfolio_details') {
+    progress(`portfolio-${block.id}`, 'Lecture de votre portefeuille', 'done',
+      ctx.portfolioView ? `${ctx.portfolioView.summary.positions} position(s)` : 'pas encore créé');
+    const content = ctx.portfolioView
+      ? JSON.stringify(ctx.portfolioView)
+      : 'The client has not created a portfolio yet: invite them to create it in the Portefeuille tab.';
+    return { result: { type: 'tool_result', tool_use_id: block.id, content }, research: null };
+  }
   if (block.name !== 'research_company') return fail(`Unknown tool ${block.name}`);
   const input = validResearchInput(block.input);
   if (!input) return fail('Invalid input: company, question and request_type are required.');
@@ -258,13 +289,13 @@ async function runSimilar(block, progress, fail) {
 
 // Peer review of the reports gathered for a judgment request. The review is
 // appended to the last tool result of the batch.
-async function addPeerReview(results, judgments, progress) {
+async function addPeerReview(results, judgments, progress, portfolioText) {
   const proposal = judgments[0].proposal;
   const label = 'Revue critique des données';
   progress('review', label, 'active', `${judgments.length} rapport(s)`);
   const onTool = sourceTrail((trail) => progress('review', label, 'active', `vérification : ${trail}`));
   try {
-    const { review, tools } = await research.reviewResearch({ proposal, reports: judgments, onTool });
+    const { review, tools } = await research.reviewResearch({ proposal, reports: judgments, portfolio: portfolioText, onTool });
     console.log(`review (${judgments.length} report(s)): ${review.split('\n')[0]} tools=${tools.join(',')}`);
     const verdict = review.match(/VERDICT:\s*(SOLID|PARTIAL|WEAK)/i)?.[1]?.toUpperCase();
     progress('review', label, 'done', verdict ? `fiabilité des données : ${VERDICTS[verdict]}` : 'terminée');
@@ -276,8 +307,18 @@ async function addPeerReview(results, judgments, progress) {
   }
 }
 
-async function reply({ messages, chatId, profile, onProgress }) {
+async function reply({ messages, chatId, profile, portfolio, onProgress }) {
   const progress = makeProgress(onProgress);
+  // The logged-in client's portfolio, enriched with the database (sector,
+  // industry, country, guardrail checks). Loaded once per answer.
+  const portfolioView = await portfolioContext.details({ portfolio, profile }).catch((err) => {
+    console.error('portfolio context error:', err.message);
+    return undefined;
+  });
+  const portfolioText = portfolioView === undefined
+    ? 'Portefeuille du client : indisponible pour le moment (erreur de chargement).'
+    : portfolioContext.summary(portfolioView);
+  const ctx = { portfolioView: portfolioView || null };
   if (!fallbackStates.has(chatId)) fallbackStates.set(chatId, new BetaFallbackState());
 
   // The history must start with a user turn: drop leading assistant messages
@@ -286,6 +327,7 @@ async function reply({ messages, chatId, profile, onProgress }) {
   while (history.length && history[0].role !== 'user') history.shift();
 
   const tools = [
+    PORTFOLIO_TOOL,
     ...(peers.isEnabled() ? [SIMILAR_TOOL] : []),
     ...(research.isEnabled() ? [RESEARCH_TOOL] : []),
   ];
@@ -293,6 +335,7 @@ async function reply({ messages, chatId, profile, onProgress }) {
     // Stable instructions first, then the per-user profile.
     { type: 'text', text: SYSTEM },
     { type: 'text', text: `Profil investisseur du client :\n${profileSummary(profile)}` },
+    { type: 'text', text: portfolioText },
   ];
   if (!research.isEnabled()) {
     system.push({ type: 'text', text: "L'outil research_company n'est pas disponible dans cet environnement." });
@@ -331,13 +374,13 @@ async function reply({ messages, chatId, profile, onProgress }) {
       // return every tool result in a single user message.
       progress('analyse', 'Analyse de la question', 'done');
       history.push({ role: 'assistant', content: response.content });
-      const outcomes = await Promise.all(toolUses.map((block) => runTool(block, progress)));
+      const outcomes = await Promise.all(toolUses.map((block) => runTool(block, progress, ctx)));
       const results = outcomes.map((o) => o.result);
       // Judgment requests only, and one review per answer.
       const judgments = outcomes.map((o) => o.research).filter((r) => r?.kind === 'judgment');
       if (judgments.length && !reviewed && research.isReviewEnabled()) {
         reviewed = true;
-        await addPeerReview(results, judgments, progress);
+        await addPeerReview(results, judgments, progress, portfolioText);
       }
       history.push({ role: 'user', content: results });
       continue;
