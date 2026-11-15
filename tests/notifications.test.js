@@ -1,6 +1,6 @@
 'use strict';
 // Pure tests always run. The Postgres tests need TEST_DATABASE_URL pointing to a
-// THROWAWAY database with db/migrations V1..V8 applied (they delete rows).
+// THROWAWAY database with db/migrations V1..V12 applied (they delete rows).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -74,9 +74,10 @@ const needsDb = { skip: !process.env.TEST_DATABASE_URL && 'TEST_DATABASE_URL not
 async function withDb(fn) {
   const { Pool } = require('pg');
   const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
-  const clean = () => pool.query("DELETE FROM notification_subscriptions WHERE username LIKE 'test-%'")
-    .then(() => pool.query("DELETE FROM portfolios WHERE username LIKE 'test-%'"));
+  // Deleting the users cascades to their subscriptions and portfolios (V12).
+  const clean = () => pool.query("DELETE FROM users WHERE username LIKE 'test-%'");
   await clean();
+  await pool.query("INSERT INTO users (username) VALUES ('test-a'), ('test-p')");
   try {
     await fn(pool);
   } finally {

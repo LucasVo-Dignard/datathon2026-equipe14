@@ -1,7 +1,7 @@
 'use strict';
-// Prototype chatbot server. Profiles and chats go to Postgres when DATABASE_URL
-// is set (see profile-store.js, chat-store.js); users, login sessions and, without
-// a database, everything else live in one JSON file.
+// Prototype chatbot server. Users, sessions, profiles, portfolios and chats go to
+// Postgres when DATABASE_URL is set (see session-store.js, profile-store.js,
+// portfolio-store.js, chat-store.js); without a database, they live in one JSON file.
 // Login is username-only (no password) on purpose: this is a prototype.
 
 const http = require('node:http');
@@ -14,6 +14,8 @@ const { createReportStore } = require('./reports-store');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { createChatStore } = require('./chat-store');
+const { createSessionStore, SESSION_MAX_AGE_S } = require('./session-store');
+const { importJson, hasJsonData } = require('./json-import');
 const { createPortfolioStore } = require('./portfolio-store');
 const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
@@ -53,7 +55,9 @@ function saveDb() {
   fs.renameSync(tmp, DATA_FILE);
 }
 
-// Profils investisseurs : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
+// Utilisateurs et sessions : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
+const sessions = createSessionStore({ db, saveDb });
+// Profils investisseurs : idem.
 const profiles = createProfileStore({ db, saveDb });
 // Conversations du chat : idem (tables chats / chat_messages).
 const chats = createChatStore({ db, saveDb });
@@ -116,13 +120,8 @@ function getCookie(req, name) {
   return null;
 }
 
-function currentUser(req) {
-  const token = getCookie(req, COOKIE);
-  return token && Object.hasOwn(db.sessions, token) ? db.sessions[token] : null;
-}
-
-function requireUser(req) {
-  const user = currentUser(req);
+async function requireUser(req) {
+  const user = await sessions.user(getCookie(req, COOKIE));
   if (!user) throw new HttpError(401, 'Non connecté');
   return user;
 }
@@ -158,31 +157,25 @@ async function handleApi(req, res, pathname) {
       throw new HttpError(400, "Nom d'utilisateur invalide (1 à 32 lettres, chiffres, _ . -)");
     }
     const name = username.trim();
-    if (!Object.hasOwn(db.users, name)) db.users[name] = { createdAt: Date.now() };
     const token = crypto.randomBytes(32).toString('hex');
-    db.sessions[token] = name;
-    saveDb();
+    await sessions.login(name, token);
     return sendJson(res, 200, { username: name }, {
-      'Set-Cookie': `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`,
+      'Set-Cookie': `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_S}`,
     });
   }
 
   if (pathname === '/api/logout' && method === 'POST') {
-    const token = getCookie(req, COOKIE);
-    if (token && Object.hasOwn(db.sessions, token)) {
-      delete db.sessions[token];
-      saveDb();
-    }
+    await sessions.logout(getCookie(req, COOKIE));
     return sendJson(res, 200, { ok: true }, {
       'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
     });
   }
 
   if (pathname === '/api/me' && method === 'GET') {
-    return sendJson(res, 200, { username: requireUser(req) });
+    return sendJson(res, 200, { username: await requireUser(req) });
   }
 
-  const user = requireUser(req);
+  const user = await requireUser(req);
 
   if (pathname === '/api/profile/questionnaire' && method === 'GET') {
     return sendJson(res, 200, profile.publicQuestionnaire());
@@ -506,12 +499,28 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-Promise.all([profiles.init(), chats.init(), portfolioStore.init()]).then(
+// Démarrage avec Postgres : copie en base les utilisateurs, sessions et conversations
+// du fichier JSON (une copie du fichier est gardée), puis les retire du fichier.
+// Le fichier reste utilisé pour ce qui n'est pas en base (rapports sans REPORTS_BUCKET) ;
+// sans ce retrait, une session fermée reviendrait au prochain démarrage.
+async function importJsonFile() {
+  if (sessions.kind !== 'postgres' || !hasJsonData(db)) return;
+  const counts = await importJson(sessions.pool, db);
+  const backup = `${DATA_FILE}.imported-${Date.now()}`;
+  fs.copyFileSync(DATA_FILE, backup);
+  db.users = {};
+  db.sessions = {};
+  db.chats = {};
+  saveDb();
+  console.log(`fichier JSON importé dans Postgres (${JSON.stringify(counts)}), copie gardée dans ${backup}`);
+}
+
+Promise.all([sessions.init(), profiles.init(), chats.init(), portfolioStore.init()]).then(importJsonFile).then(
   () => server.listen(PORT, () => console.log(
-    `chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, conversations : ${chats.kind}, `
+    `chatbot listening on :${PORT} (utilisateurs, profils, portefeuilles et conversations : ${sessions.kind}, `
     + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
   (err) => {
-    console.error('Impossible d\'initialiser le stockage (profils / conversations / portefeuilles) :', err.message || err.code || err);
+    console.error(`Impossible d'initialiser le stockage (${sessions.kind}) :`, err.message || err.code || err);
     process.exit(1);
   },
 );

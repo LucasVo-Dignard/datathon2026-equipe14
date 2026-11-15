@@ -1,7 +1,7 @@
 'use strict';
 // Real news: RSS parsing, company matching, Comprehend enrichment, the
 // news-refresh job and the app's query. Database tests need TEST_DATABASE_URL
-// on a THROWAWAY database with db/migrations V1..V10 applied (they delete rows).
+// on a THROWAWAY database with db/migrations V1..V12 applied (they delete rows).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseRss, cleanText, httpUrl } = require('../src/marketdata/news/rss');
@@ -113,7 +113,7 @@ async function withPool(fn) {
   const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
   const clean = async () => {
     await pool.query("DELETE FROM news_items WHERE source LIKE 'test-%' OR source = 'yahoo'");
-    await pool.query("DELETE FROM portfolios WHERE username LIKE 'news-%'");
+    await pool.query("DELETE FROM users WHERE username LIKE 'news-%'"); // cascades to portfolios (V12)
     await pool.query("DELETE FROM company_profiles WHERE provider = 'test-news'");
   };
   await clean();
@@ -140,6 +140,7 @@ test('news-refresh job: feeds + Yahoo -> enriched, linked, deduplicated; app que
     await pool.query(`INSERT INTO company_profiles (symbol, provider, name, sector, fetched_at)
                       VALUES ($1, 'test-news', $2, 'Tech', now()) ON CONFLICT DO NOTHING`, [symbol, name]);
   }
+  await pool.query("INSERT INTO users (username) VALUES ('news-a')");
   await pool.query("INSERT INTO portfolios (username, source, cash) VALUES ('news-a', 'custom', 0)");
   await pool.query("INSERT INTO portfolio_holdings (username, symbol, quantity, avg_cost) VALUES ('news-a', 'RY.TO', 1, 1), ('news-a', 'MSFT', 1, 1)");
 

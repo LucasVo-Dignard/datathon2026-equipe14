@@ -1,7 +1,7 @@
 'use strict';
 // Price-move alerts job (src/marketdata/jobs/price-alerts.js).
 // Message tests always run. Database tests need TEST_DATABASE_URL on a
-// THROWAWAY database with db/migrations V1..V8 applied (they delete rows).
+// THROWAWAY database with db/migrations V1..V12 applied (they delete rows).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const alertsJob = require('../src/marketdata/jobs/price-alerts');
@@ -80,8 +80,8 @@ async function withDb(fn) {
   const db = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   await db.connect();
   const clean = async () => {
-    await db.query("DELETE FROM notification_subscriptions WHERE username LIKE 'pa-%'");
-    await db.query("DELETE FROM portfolios WHERE username LIKE 'pa-%'");
+    // Cascades to subscriptions, alerts sent and portfolios (V12).
+    await db.query("DELETE FROM users WHERE username LIKE 'pa-%'");
     await db.query("DELETE FROM price_bars WHERE symbol LIKE 'PA%'");
   };
   await clean();
@@ -98,6 +98,7 @@ const bar = (db, symbol, date, close) => db.query(
    VALUES ($1, 'yahoo', $2, $3, $3, $3, $3, $3, 1000, now())`, [symbol, date, close]);
 
 async function subscriber(db, username, threshold, symbols) {
+  await db.query('INSERT INTO users (username) VALUES ($1)', [username]);
   await db.query('INSERT INTO notification_subscriptions (username, email, threshold_pct) VALUES ($1, $2, $3)',
     [username, `${username}@example.com`, threshold]);
   await db.query("INSERT INTO portfolios (username, source, cash) VALUES ($1, 'custom', 0)", [username]);
@@ -115,6 +116,7 @@ test('threshold, freshness, holdings, dedup and failures', needsDb, () => withDb
   await subscriber(db, 'pa-bold', 7, ['PABIG']); // Élevé: 7 %
   await subscriber(db, 'pa-unverified', 4, ['PABIG']); // SES rejects (sandbox)
   // A portfolio without a subscription is never alerted.
+  await db.query("INSERT INTO users (username) VALUES ('pa-nosub')");
   await db.query("INSERT INTO portfolios (username, source, cash) VALUES ('pa-nosub', 'custom', 0)");
   await db.query("INSERT INTO portfolio_holdings (username, symbol, quantity, avg_cost) VALUES ('pa-nosub', 'PABIG', 1, 1)");
 
