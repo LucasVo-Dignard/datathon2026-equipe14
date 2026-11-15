@@ -61,8 +61,6 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | **Amazon Comprehend** | Ton des articles et sociétés nommées, pour rattacher les news aux titres |
 | **Amazon SES** | Alertes de prix par courriel |
 | **S3** | État Terraform, rapports, paquets de migration, base de connaissances. Tous privés |
-| **Systems Manager** | Déploiements et migrations sur l'EC2, sans SSH ni port ouvert |
-| **IAM**, **CloudWatch Logs** | Permissions minimales par composant, et journaux des jobs |
 
 L'infrastructure est décrite en Terraform, dans trois stacks : `infra/` (réseau, EC2, ECR,
 SES, S3), `infra-db/` (RDS) et `infra-batch/` (jobs). Il existe **un environnement
