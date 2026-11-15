@@ -503,7 +503,13 @@ api('GET', '/api/me')
   const MIN_CHAT = 300;
   const MIN_MAIN = 420;
 
-  const clamp = (w) => Math.round(Math.max(MIN_CHAT, Math.min(w, workspace.clientWidth - MIN_MAIN - handle.offsetWidth)));
+  // While the app view is still hidden (e.g. right after a refresh, before
+  // /api/me resolves) the workspace has no width, so only enforce the minimum.
+  const clamp = (w) => {
+    const available = workspace.clientWidth;
+    const max = available ? available - MIN_MAIN - handle.offsetWidth : Infinity;
+    return Math.round(Math.max(MIN_CHAT, Math.min(w, max)));
+  };
   const current = () => $('assistant').getBoundingClientRect().width;
 
   function apply(width, save = true) {
@@ -549,8 +555,9 @@ api('GET', '/api/me')
     apply(DEFAULT, false);
   });
 
-  // Keep the width valid when the window gets smaller.
-  window.addEventListener('resize', () => {
-    if (workspace.style.getPropertyValue('--chat-width')) apply(current(), false);
-  });
+  // Keep the width valid when the workspace gets smaller (or first becomes visible).
+  new ResizeObserver(() => {
+    if (!workspace.clientWidth || !workspace.style.getPropertyValue('--chat-width')) return;
+    apply(Number(localStorage.getItem(KEY)) || current(), false);
+  }).observe(workspace);
 })();

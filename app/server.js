@@ -447,6 +447,7 @@ const STATIC = {
   '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
   '/macro.js': ['macro.js', 'text/javascript; charset=utf-8'],
   '/reports.js': ['reports.js', 'text/javascript; charset=utf-8'],
+  '/intro.js': ['intro.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };

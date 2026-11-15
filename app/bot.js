@@ -53,6 +53,7 @@ Tu connais le profil investisseur du client (ci-dessous) : adapte tes explicatio
 Tu ne donnes pas de conseil financier personnalisé : tu expliques les notions, les options et les risques pour que le client décide lui-même.
 
 Recherche : quand la question porte sur une entreprise précise (résultats trimestriels, chiffres, actualités récentes, perspectives), appelle l'outil research_company avant de répondre, une fois par entreprise. Ne l'appelle pas pour une question générale (une notion, une définition) ni quand la conversation contient déjà l'information. Base les chiffres de ta réponse sur le rapport de recherche, sans en inventer ; si le rapport ne trouve pas une information, dis-le. Si l'outil n'est pas disponible ou échoue, dis que tu n'as pas pu vérifier les données récentes et réponds avec ce que tu sais de façon générale.
+Contexte sectoriel : quand la question porte aussi sur le secteur de l'entreprise (performance du secteur, risques du secteur, comparaison avec le marché, taux, contexte économique), mets needs_market_context à true ; présente alors l'entreprise, puis son secteur et le marché.
 
 Portefeuille du client : son résumé (positions, poids, secteurs, garde-fous) figure ci-dessous et il est à jour.
 - Utilise-le dès que la question touche à ce que le client détient (« mon portefeuille », « mes actions », diversification, exposition, performance). Pour l'industrie, le pays, la devise ou le gain de chaque position, ou le détail des garde-fous, appelle get_portfolio_details.
@@ -146,6 +147,14 @@ const RESEARCH_TOOL = {
         type: 'string',
         description: 'For "judgment" only: the user\'s proposal or question, restated in one sentence in English.',
       },
+      needs_market_context: {
+        type: 'boolean',
+        description:
+          'true when the answer needs sector, market or economic context: how the company\'s sector or industry is ' +
+          'doing, sector risks, comparison with the market, interest rates, macro environment. Adds a daily snapshot ' +
+          'of US sector performance, indexes, commodities, currencies and yields to the research. Always added for ' +
+          '"judgment" requests.',
+      },
     },
     required: ['company', 'question', 'request_type'],
     additionalProperties: false,
@@ -215,7 +224,7 @@ function validResearchInput(input) {
   const kind = input.request_type === 'judgment' ? 'judgment' : 'factual';
   return {
     company: company.trim(), ticker: ticker?.trim().toUpperCase(), question: question.trim(),
-    kind, proposal: proposal?.trim() || question.trim(),
+    kind, proposal: proposal?.trim() || question.trim(), marketContext: input.needs_market_context === true,
   };
 }
 
@@ -269,11 +278,11 @@ async function runTool(block, progress, ctx) {
   progress(id, label, 'active');
   const onTool = sourceTrail((trail) => progress(id, label, 'active', trail));
   try {
-    const { report, tools, bigdataBudget, saved } = await research.researchCompany({ ...input, onTool });
+    const { report, tools, bigdataBudget, saved, market } = await research.researchCompany({ ...input, onTool });
     const trail = [...new Set(tools.map(sourceLabel).filter(Boolean))].join(' → ');
     progress(id, label, 'done', trail ? `${trail} · rapport reçu` : 'rapport reçu');
     console.log(`research ${input.ticker || input.company} (${input.kind}): tools=${tools.join(',')} `
-      + `bigdata=${bigdataBudget.calls}/${bigdataBudget.budget} saved=${saved}`);
+      + `bigdata=${bigdataBudget.calls}/${bigdataBudget.budget} market=${market || 'no'} saved=${saved}`);
     return {
       result: { type: 'tool_result', tool_use_id: block.id, content: report },
       research: { ...input, subject: input.ticker ? `${input.company} (${input.ticker})` : input.company, report },

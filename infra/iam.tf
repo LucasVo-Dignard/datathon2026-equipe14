@@ -72,6 +72,24 @@ resource "aws_iam_role_policy" "web_research_harness" {
   })
 }
 
+# The app fetches the Bigdata.com market tearsheet once a day through the
+# research gateway (app/research.js), and shares it between researches.
+# The gateway is created by the AWS CLI, its name follows the environment
+# prefix: <prefix>-research-<suffix>.
+resource "aws_iam_role_policy" "web_research_gateway" {
+  name = "invoke-research-gateway"
+  role = aws_iam_role.web.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "bedrock-agentcore:InvokeGateway"
+      Resource = "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:gateway/${local.prefix}-research-*"
+    }]
+  })
+}
+
 # The research agent saves the reports that used Bigdata.com to the earnings
 # knowledge base (app/research.js), so the same question costs no credits
 # next time. Bucket and knowledge base are created by the AWS CLI, see
