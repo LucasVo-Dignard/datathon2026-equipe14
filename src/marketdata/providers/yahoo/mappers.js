@@ -123,4 +123,46 @@ function toRatingActions(symbol, rows, period) {
   return actions.sort((a, b) => a.gradedAt - b.gradedAt);
 }
 
-module.exports = { hasQuote, toProfile, toMetrics, toPriceBars, toPriceTarget, toRatingActions };
+// Yahoo's fund sector keys -> the sector names Yahoo uses in company profiles,
+// so a fund's weights add up with its stocks' sectors.
+const FUND_SECTORS = {
+  realestate: 'Real Estate',
+  consumer_cyclical: 'Consumer Cyclical',
+  basic_materials: 'Basic Materials',
+  consumer_defensive: 'Consumer Defensive',
+  technology: 'Technology',
+  communication_services: 'Communication Services',
+  financial_services: 'Financial Services',
+  utilities: 'Utilities',
+  industrials: 'Industrials',
+  energy: 'Energy',
+  healthcare: 'Healthcare',
+};
+
+function toFundComposition(symbol, fund) {
+  const sectorWeights = {};
+  for (const entry of fund.sectorWeightings || []) {
+    for (const [key, value] of Object.entries(entry || {})) {
+      const weight = toFloat(value);
+      if (weight > 0) sectorWeights[FUND_SECTORS[key] || key] = weight;
+    }
+  }
+  const topHoldings = (fund.holdings || [])
+    .map((h) => ({ symbol: toText(h.symbol), name: toText(h.holdingName), weight: toFloat(h.holdingPercent) }))
+    .filter((h) => (h.symbol || h.name) && h.weight > 0)
+    .sort((a, b) => b.weight - a.weight);
+  return models.fundComposition({
+    symbol,
+    provider: PROVIDER,
+    quoteType: toText(fund.quoteType)?.toUpperCase() || 'UNKNOWN',
+    category: toText(fund.category),
+    family: toText(fund.family),
+    stockPosition: toFloat(fund.stockPosition),
+    bondPosition: toFloat(fund.bondPosition),
+    cashPosition: toFloat(fund.cashPosition),
+    sectorWeights,
+    topHoldings,
+  });
+}
+
+module.exports = { hasQuote, toProfile, toMetrics, toPriceBars, toPriceTarget, toRatingActions, toFundComposition, FUND_SECTORS };

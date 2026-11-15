@@ -14,7 +14,9 @@ const PROVIDER = 'yahoo';
 // Quote summary modules flattened into one `info` object, like yfinance's
 // Ticker.info. On a key collision the first module wins.
 const INFO_MODULES = ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics', 'summaryProfile'];
-const SUMMARY_MODULES = [...INFO_MODULES, 'upgradeDowngradeHistory'];
+// Funds (ETFs): what they hold. Kept out of `info` (no key collisions); empty for stocks.
+const FUND_MODULES = ['quoteType', 'fundProfile', 'topHoldings'];
+const SUMMARY_MODULES = [...INFO_MODULES, ...FUND_MODULES, 'upgradeDowngradeHistory'];
 // Profile, metrics, price target and rating actions all read the same quote
 // summary: keep the last one briefly so a refresh costs a single request.
 const SUMMARY_TTL_MS = 60 * 1000;
@@ -58,6 +60,24 @@ class YahooClient {
     }
     if (summary.price?.exchangeName) info.fullExchangeName = summary.price.exchangeName;
     return info;
+  }
+
+  // Fund data from the same quote summary: { quoteType, category, family,
+  // stockPosition, bondPosition, cashPosition, sectorWeightings: [{ key: w }],
+  // holdings: [{ symbol, holdingName, holdingPercent }] }, as Yahoo gives them.
+  async fund(symbol) {
+    const summary = await this.#summary(symbol);
+    const top = summary.topHoldings || {};
+    return {
+      quoteType: summary.quoteType?.quoteType || null,
+      category: summary.fundProfile?.categoryName || null,
+      family: summary.fundProfile?.family || null,
+      stockPosition: top.stockPosition,
+      bondPosition: top.bondPosition,
+      cashPosition: top.cashPosition,
+      sectorWeightings: top.sectorWeightings || [],
+      holdings: top.holdings || [],
+    };
   }
 
   // Per-firm rating actions: [{ gradedAt, firm, toGrade, fromGrade, action,

@@ -281,7 +281,7 @@ async function handleApi(req, res, pathname) {
         }));
       }
       const brief = reports.buildBrief({ period, portfolio, profile: investorProfile, changes });
-      const highlights = reports.highlights(reports.analyze({ period, portfolio, changes }));
+      const highlights = reports.highlights(reports.analyze({ period, portfolio, changes, profile: investorProfile }));
       let content;
       try {
         content = await report({ label: reports.PERIODS[period].label, brief });
@@ -336,7 +336,12 @@ async function handleApi(req, res, pathname) {
       throw new HttpError(502, 'Source de données indisponible, réessayez plus tard');
     }
     if (!stock) throw new HttpError(404, `Aucune donnée pour ${symbol}`);
-    return sendJson(res, 200, stock);
+    // ETF: its composition, for the quick view. Optional, never fails the lookup.
+    const fund = await stocks.fund(symbol).catch((err) => {
+      console.error(`fund lookup error (${symbol}):`, err.message);
+      return null;
+    });
+    return sendJson(res, 200, { ...stock, fund });
   }
 
   if (pathname === '/api/chats') {

@@ -76,9 +76,9 @@ const QUESTIONS = [
     options: [['never', 'Rarement ou jamais'], ['sometimes', 'Parfois'], ['often', 'Souvent']] },
 
   // --- Préférences ---------------------------------------------------------
-  { id: 'sectors', section: 'Vos préférences', kind: 'multi', optional: true,
+  { id: 'sectors', section: 'Vos préférences', kind: 'multi', optional: true, avoidable: 'avoidSectors',
     text: 'Quels secteurs vous intéressent particulièrement ?',
-    help: 'Plusieurs choix possibles. Laissez vide si vous n’avez pas de préférence.',
+    help: 'Un clic : secteur qui vous intéresse. Deux clics : secteur à éviter. Laissez vide si vous n’avez pas de préférence.',
     options: [['tech', 'Intelligence artificielle et technologies'], ['health', 'Santé'],
       ['energy', 'Énergie'], ['finance', 'Banques et assurances'], ['consumer', 'Consommation'],
       ['industry', 'Industrie et transport'], ['realEstate', 'Immobilier'],
@@ -165,6 +165,13 @@ function validate(raw) {
       if (!option(q.id, v)) throw new ProfileError(`Choix invalide : « ${q.text} »`);
       answers[q.id] = v;
     }
+  }
+  // Second state of a multi question (e.g. sectors to avoid): same options,
+  // never both wanted and avoided.
+  for (const q of QUESTIONS.filter((x) => x.avoidable)) {
+    const v = raw[q.avoidable] ?? [];
+    if (!Array.isArray(v) || v.some((x) => !option(q.id, x))) throw new ProfileError(`Choix invalide : « ${q.text} »`);
+    answers[q.avoidable] = [...new Set(v)].filter((x) => !answers[q.id].includes(x));
   }
   return answers;
 }
@@ -286,6 +293,7 @@ function buildProfile(answers) {
     horizon: { id: answers.horizon, label: label('horizon', answers.horizon) },
     preferences: {
       sectors: answers.sectors.map((v) => label('sectors', v)),
+      avoidSectors: (answers.avoidSectors || []).map((v) => label('sectors', v)),
       regions: answers.regions.map((v) => label('regions', v)),
       style: label('style', answers.style),
       diversification: label('diversification', answers.diversification),
@@ -301,6 +309,7 @@ function buildProfile(answers) {
       maxSingleSectorShare: s.score >= 60 ? 35 : 25,
       minDiversifiedAssets: 5,
       excludedActivities: answers.exclusions,
+      avoidedSectors: answers.avoidSectors || [],
       regions: answers.regions,
     },
     tensions: findTensions(answers, s),
@@ -317,6 +326,7 @@ function profileSummary(p) {
     `Niveau de risque : ${p.level.label} (score ${p.score}/100, tolérance ${p.tolerance.score}, capacité ${p.capacity.score}).`,
     `Objectif : ${p.objective.label}. Horizon : ${p.horizon.label}.`,
     `Secteurs d’intérêt : ${p.preferences.sectors.join(', ') || 'aucune préférence'}. Style : ${p.preferences.style}.`,
+    `Secteurs à éviter : ${p.preferences.avoidSectors?.join(', ') || 'aucun'}.`,
     `Régions visées : ${p.preferences.regions?.join(', ') || 'aucune préférence'}.`,
     `Diversification : ${p.preferences.diversification}. Cryptoactifs : ${p.preferences.crypto}. ESG : ${p.preferences.esg}.`,
     `Exclusions : ${p.preferences.exclusions.join(', ') || 'aucune'}.`,
@@ -330,8 +340,8 @@ function profileSummary(p) {
 // Version publique du questionnaire (pour l'interface).
 function publicQuestionnaire() {
   return {
-    questions: QUESTIONS.map(({ id, section, kind, text, help, optional, min, max, options }) => ({
-      id, section, type: ['multi', 'number'].includes(kind) ? kind : 'single', text, help, optional, min, max,
+    questions: QUESTIONS.map(({ id, section, kind, text, help, optional, min, max, options, avoidable }) => ({
+      id, section, type: ['multi', 'number'].includes(kind) ? kind : 'single', text, help, optional, min, max, avoidable,
       options: options?.map(([value, text]) => ({ value, text })),
     })),
     personas: PERSONAS,

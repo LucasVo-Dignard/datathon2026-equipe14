@@ -140,17 +140,29 @@ function createPortfolioService({ store, stocks, log = console, random = Math.ra
     return { ...q, rate: await cadRate(q.currency) };
   }
 
-  async function value(record) {
-    const priced = await Promise.all(record.holdings.map((h) => pricedQuote(h.symbol).catch((err) => {
-      log.error(`portfolio quote error (${h.symbol}):`, err.message);
+  // Composition if the symbol is a fund (ETF), else null. Never fails the valuation.
+  async function fundOf(symbol) {
+    if (!stocks.fund) return null;
+    return stocks.fund(symbol).catch((err) => {
+      log.error(`portfolio fund error (${symbol}):`, err.message);
       return null;
-    })));
+    });
+  }
+
+  async function value(record) {
+    const [priced, funds] = await Promise.all([
+      Promise.all(record.holdings.map((h) => pricedQuote(h.symbol).catch((err) => {
+        log.error(`portfolio quote error (${h.symbol}):`, err.message);
+        return null;
+      }))),
+      Promise.all(record.holdings.map((h) => fundOf(h.symbol))),
+    ]);
 
     const holdings = record.holdings.map((h, i) => {
       const q = priced[i];
       if (!q) {
         return { symbol: h.symbol, name: h.symbol, sector: null, country: null, currency: null, quantity: h.quantity, available: false,
-          price: null, prevClose: null, avgCost: null, marketValue: 0, cost: 0, gain: 0, gainPct: 0, dayChange: 0, dayChangePct: 0 };
+          fund: null, price: null, prevClose: null, avgCost: null, marketValue: 0, cost: 0, gain: 0, gainPct: 0, dayChange: 0, dayChangePct: 0 };
       }
       const price = q.price * q.rate;
       const prevClose = q.change == null ? price : (q.price - q.change) * q.rate;
@@ -163,6 +175,8 @@ function createPortfolioService({ store, stocks, log = console, random = Math.ra
         sector: q.sector,
         country: q.country || null,
         currency: q.currency,
+        // ETF composition (sector weights, top holdings), null for a stock.
+        fund: funds[i],
         quantity: h.quantity,
         available: true,
         price: round2(price),

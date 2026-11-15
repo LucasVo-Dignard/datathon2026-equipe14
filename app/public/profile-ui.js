@@ -103,6 +103,31 @@
         class: `option${value === o.value ? ' selected' : ''}`, role: 'radio', 'aria-checked': String(value === o.value),
         onclick: () => { st.answers[q.id] = o.value; next(); },
       }, o.text)));
+    } else if (q.type === 'multi' && q.avoidable) {
+      // Three states per option: neutral -> wanted (q.id) -> avoided (q.avoidable) -> neutral.
+      const wanted = new Set(value || []);
+      const avoided = new Set(st.answers[q.avoidable] || []);
+      const stateOf = (v) => (wanted.has(v) ? 'wanted' : avoided.has(v) ? 'avoided' : 'neutral');
+      const LABELS = { wanted: 'qui vous intéresse', avoided: 'à éviter', neutral: 'sans préférence' };
+      const paint = (btn, v) => {
+        const s = stateOf(v);
+        btn.className = `option tri ${s === 'wanted' ? 'selected' : s === 'avoided' ? 'avoid' : ''}`;
+        btn.setAttribute('aria-label', `${btn.dataset.text} : ${LABELS[s]}`);
+        btn.querySelector('.tri-mark').textContent = s === 'wanted' ? '✓' : s === 'avoided' ? '✕' : '';
+      };
+      input = h('div', { class: 'options' }, q.options.map((o) => {
+        const btn = h('button', { type: 'button', 'data-text': o.text, onclick: () => {
+          const s = stateOf(o.value);
+          if (s === 'neutral') wanted.add(o.value);
+          else if (s === 'wanted') { wanted.delete(o.value); avoided.add(o.value); }
+          else avoided.delete(o.value);
+          st.answers[q.id] = [...wanted];
+          st.answers[q.avoidable] = [...avoided];
+          paint(btn, o.value);
+        } }, h('span', { class: 'tri-mark', 'aria-hidden': 'true' }), h('span', {}, o.text));
+        paint(btn, o.value);
+        return btn;
+      }));
     } else if (q.type === 'multi') {
       const chosen = new Set(value || []);
       input = h('div', { class: 'options' }, q.options.map((o) => h('label', { class: `option check${chosen.has(o.value) ? ' selected' : ''}` },
@@ -198,6 +223,7 @@
       h('h2', {}, 'Vos préférences'),
       h('dl', { class: 'prefs' },
         h('dt', {}, 'Secteurs'), h('dd', {}, chips(p.sectors)),
+        h('dt', {}, 'Secteurs à éviter'), h('dd', {}, chips(p.avoidSectors || [])),
         h('dt', {}, 'Régions'), h('dd', {}, chips(p.regions || [])),
         h('dt', {}, 'Entreprises'), h('dd', {}, p.style),
         h('dt', {}, 'Diversification'), h('dd', {}, p.diversification),

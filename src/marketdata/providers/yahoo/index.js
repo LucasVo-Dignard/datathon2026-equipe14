@@ -77,6 +77,20 @@ class YahooRatingActionFetcher extends base.RatingActionFetcher {
   }
 }
 
+// Stocks get a composition too (quoteType "EQUITY", no weights).
+class YahooFundCompositionFetcher extends base.FundCompositionFetcher {
+  static provider = PROVIDER;
+
+  constructor(client = new YahooClient()) {
+    super(client);
+  }
+
+  async _fetch(symbol) {
+    await quoteInfo(this, symbol);
+    return mappers.toFundComposition(symbol, await this.client.fund(symbol));
+  }
+}
+
 module.exports = {
   YahooClient,
   YahooProfileFetcher,
@@ -84,4 +98,5 @@ module.exports = {
   YahooPriceHistoryFetcher,
   YahooPriceTargetFetcher,
   YahooRatingActionFetcher,
+  YahooFundCompositionFetcher,
 };
