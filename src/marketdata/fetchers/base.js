@@ -5,7 +5,7 @@
 // ...). Code that needs data depends only on these, so providers can be
 // swapped or combined without touching callers. A concrete fetcher extends a
 // kind and has a single job: fetch one kind of data from one provider, e.g.
-// `class FinnhubNewsFetcher extends NewsFetcher`. It sets `static provider`
+// `class YahooProfileFetcher extends ProfileFetcher`. It sets `static provider`
 // and receives that provider's shared client.
 //
 // The public `fetch` methods are template methods: they normalize the input,

@@ -119,19 +119,20 @@ L'interface (`app/public/`) n'utilise aucun framework ni aucune dépendance.
 
 ## Sources de données
 
-Uniquement des données publiques, récupérées **à la demande** : l'app lit d'abord la
-base, et n'appelle une source que si la donnée manque ou est périmée. Le jeu de
-données de départ du cas n'est pas utilisé. Chaque valeur garde sa source et sa date.
+Des données publiques, plus Bigdata.com pour l'agent de recherche, récupérées
+**à la demande** : l'app lit d'abord la base, et n'appelle une source que si la donnée
+manque ou est périmée. Le jeu de données de départ du cas n'est pas utilisé. Chaque
+valeur garde sa source et sa date.
 
-| Source | Données | Accès | Où |
-| --- | --- | --- | --- |
-| **Yahoo Finance** (`yahoo-finance2`) | Cours quotidiens ajustés, profils, indicateurs, objectifs et notes d'analystes, compositions de FNB, taux de change (`USDCAD=X`), news par titre | Sans clé. Débit limité à 60 appels/min dans le job | `src/marketdata/providers/yahoo/` |
-| **companiesmarketcap.com** | Classement mondial des capitalisations (≈ 1 000 sociétés suivies) | CSV public | `src/marketdata/providers/companiesmarketcap/` |
-| **CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch** | Titres, extraits de 400 caractères au plus, liens, dans leur langue d'origine | Flux RSS publics. On ne garde que le titre, l'extrait et le lien vers l'éditeur | `src/marketdata/news/feeds.js` |
-| **SEC EDGAR** | Communiqués de résultats (8-K, pièce 99.1), versés dans la base de connaissances de l'agent | Public | `agents/knowledge-base/` |
+| Source | Données | Accès |
+| --- | --- | --- |
+| **Yahoo Finance** (`yahoo-finance2`) | Cours quotidiens ajustés, profils, indicateurs, objectifs et notes d'analystes, compositions de FNB, taux de change (`USDCAD=X`), news par titre | Sans clé. Débit limité à 60 appels/min dans le job |
+| **companiesmarketcap.com** | Classement mondial des capitalisations (≈ 1 000 sociétés suivies) | CSV public |
+| **CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch** | Titres, extraits de 400 caractères au plus, liens, dans leur langue d'origine | Flux RSS publics. On ne garde que le titre, l'extrait et le lien vers l'éditeur |
+| **SEC EDGAR** | Communiqués de résultats (8-K, pièce 99.1), versés dans la base de connaissances de l'agent | Public |
+| **Bigdata.com** | Données financières premium pour l'agent de recherche : fiches société (résultats, valorisation, avis d'analystes), news et appels de résultats, vue de marché (secteurs, indices, taux), données macro par pays | Payant (crédits limités), en MCP derrière la Gateway AgentCore. Clé API dans Secrets Manager, au plus 6 requêtes/min et 3 appels par recherche |
 
-Les sources de l'agent de recherche (Bigdata.com, recherche web) sont décrites dans
-[Agents](#agents).
+La recherche web de l'agent est décrite dans [Agents](#agents).
 
 **Conditions des flux RSS.** Ils sont offerts pour l'usage personnel et pour les
 agrégateurs qui affichent le titre et un court extrait, avec un lien vers l'article
@@ -179,11 +180,18 @@ for %f in (.env-aws .env-dev) do @for /f "usebackq eol=# tokens=1,* delims==" %a
 Les variables ne valent que pour le terminal ouvert : relance la commande dans chaque
 nouveau terminal, et après avoir renouvelé `.env-aws`.
 
-**Variables de l'app et des jobs.** Sur AWS, la plupart sont posées
-automatiquement : le script `chatbot-db-env` de l'EC2 construit `DATABASE_URL` depuis
-RDS et Secrets Manager, Terraform et `scripts/deploy-app.sh` remplissent
-`/etc/chatbot.env`, et Terraform la définition du job. `AGENT_*` gardent leurs valeurs par défaut et
-`FINNHUB_API_KEY` n'est pas définie sur AWS. En local, elles sont toutes optionnelles.
+**Variables de l'app et des jobs.** Sur AWS, personne n'a à les poser à la main :
+
+| Où | Posées par | Variables |
+| --- | --- | --- |
+| Serveur web (EC2), `/etc/chatbot.env` | Terraform, au démarrage de l'instance | `AWS_REGION`, `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL` |
+| | `scripts/deploy-app.sh`, à chaque déploiement | `REPORTS_BUCKET`, `RESEARCH_*` |
+| | le script `chatbot-db-env`, à chaque démarrage de l'app | `DATABASE_URL`, construite depuis RDS et Secrets Manager |
+| Jobs Batch | Terraform (`infra-batch/batch.tf`) | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SECRET_ARN`, `AWS_DEFAULT_REGION`, `REFRESH_ENABLED`, `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL`, `REPORTS_BUCKET` |
+
+Les autres (`PORT`, `DATA_FILE`, `AGENT_MODEL`, `AGENT_EFFORT`, `NEWS_ENABLED`) ne sont
+posées nulle part et gardent leur valeur par défaut. En local, elles sont toutes
+optionnelles : décommente celles qu'il te faut dans `.env-dev`.
 
 | Variable | Défaut | Effet |
 | --- | --- | --- |

@@ -5,8 +5,8 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Canonical form of a ticker (" ry.to " -> "RY.TO"). Yahoo and Finnhub both
-// use the .TO suffix for TSX listings, so one format works for both.
+// Canonical form of a ticker (" ry.to " -> "RY.TO"). Yahoo uses the .TO
+// suffix for TSX listings.
 function normalizeSymbol(symbol) {
   const cleaned = typeof symbol === 'string' ? symbol.trim().toUpperCase() : '';
   if (!cleaned) throw new RangeError('symbol must not be empty');

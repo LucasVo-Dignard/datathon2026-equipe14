@@ -12,8 +12,6 @@
 // symbols. The exit code is 1 only when nothing succeeded at all (database or
 // network down), so AWS Batch retries the job only in that case.
 //
-// Finnhub steps run only if FINNHUB_API_KEY is set.
-//
 // When ALERTS_SENDER is set, the subscribers' holdings are refreshed first,
 // then price-move alerts are emailed (SES, price-alerts.js), then the other
 // symbols are refreshed. With --symbols, alerts are still sent but holdings
@@ -71,7 +69,7 @@ async function main(argv = process.argv.slice(2), { env = process.env, log = def
       log.warn('no active tracked symbols: nothing to do');
       return 0;
     }
-    const jobSteps = steps || defaultSteps({ env, log });
+    const jobSteps = steps || defaultSteps();
     const firstSet = new Set(first);
     const rest = symbols.filter((s) => !firstSet.has(s));
     const report = { succeeded: 0, failed: 0 };

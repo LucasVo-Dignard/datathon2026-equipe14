@@ -8,7 +8,7 @@
 // Conventions:
 // - Amounts are in the listing currency, in units (not millions).
 // - Ratios such as margins, ROE and dividend yield are fractions (0.25 = 25%).
-// - `provider` records where the row came from ("yahoo", "finnhub").
+// - `provider` records where the row came from (e.g. "yahoo").
 // - Calendar days are "YYYY-MM-DD" strings; instants are Date objects (UTC).
 // - `fetchedAt` lets us decide when cached data is stale.
 //

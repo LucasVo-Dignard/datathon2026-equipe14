@@ -7,14 +7,12 @@
 const { transaction } = require('./db/connection');
 const repo = require('./db/repositories');
 const { RateLimiter } = require('./http');
-const finnhub = require('./providers/finnhub');
 const yahoo = require('./providers/yahoo');
-const { DateRange, addDays, today: localToday } = require('./values');
+const { DateRange, today: localToday } = require('./values');
 
 // Re-fetching a short overlap picks up late corrections and actions that
 // Yahoo reports a few days after the fact; upserts make it idempotent.
 const LOOKBACK_DAYS = 7;
-const EARNINGS_AHEAD_DAYS = 90;
 // Yahoo has no published quota; stay well below where it starts throttling.
 const YAHOO_CALLS_PER_MINUTE = 60;
 
@@ -39,32 +37,12 @@ function yahooSteps(client, { today = localToday(), priceDays = LOOKBACK_DAYS } 
   ];
 }
 
-function finnhubSteps(client, { today = localToday() } = {}) {
-  const recent = DateRange.lastDays(LOOKBACK_DAYS, today);
-  const earningsWindow = new DateRange(recent.start, addDays(today, EARNINGS_AHEAD_DAYS));
-  const news = new finnhub.FinnhubNewsFetcher(client);
-  const earnings = new finnhub.FinnhubEarningsFetcher(client);
-  const recommendations = new finnhub.FinnhubRecommendationFetcher(client);
-  return [
-    ['finnhub.news', async (db, s) => repo.saveNews(db, await news.fetch(s, recent))],
-    ['finnhub.earnings', async (db, s) => repo.saveEarnings(db, await earnings.fetch(s, earningsWindow))],
-    ['finnhub.recommendations', async (db, s) => repo.saveRecommendations(db, await recommendations.fetch(s))],
-  ];
-}
-
 function newYahooClient(callsPerMinute = YAHOO_CALLS_PER_MINUTE) {
   return new yahoo.YahooClient({ rateLimiter: new RateLimiter(callsPerMinute, 60_000) });
 }
 
-// Yahoo steps, plus Finnhub's if FINNHUB_API_KEY is set.
-function defaultSteps({ env = process.env, log = console, yahooClient = newYahooClient(), ...options } = {}) {
-  const steps = yahooSteps(yahooClient, options);
-  if (env[finnhub.API_KEY_ENV_VAR]) {
-    steps.push(...finnhubSteps(finnhub.FinnhubClient.fromEnv(env), options));
-  } else {
-    log.info(`${finnhub.API_KEY_ENV_VAR} not set: skipping Finnhub steps`);
-  }
-  return steps;
+function defaultSteps({ yahooClient = newYahooClient(), ...options } = {}) {
+  return yahooSteps(yahooClient, options);
 }
 
 // Run every step for every symbol. A failing step is logged and recorded
@@ -95,4 +73,4 @@ async function refresh(db, symbols, steps, { log = console, track = true } = {})
   return report;
 }
 
-module.exports = { yahooSteps, finnhubSteps, defaultSteps, newYahooClient, refresh, LOOKBACK_DAYS };
+module.exports = { yahooSteps, defaultSteps, newYahooClient, refresh, LOOKBACK_DAYS };

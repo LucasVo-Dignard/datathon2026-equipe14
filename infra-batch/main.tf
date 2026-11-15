@@ -68,7 +68,7 @@ locals {
 # Security group of the jobs (daily refresh, news, scheduled reports): NO
 # inbound rules at all, so nothing can connect to it, even though it has a
 # public IP while a job runs.
-# Outbound: HTTPS (Yahoo, Finnhub, RSS feeds, ECR, Secrets Manager, CloudWatch
+# Outbound: HTTPS (Yahoo, RSS feeds, ECR, Secrets Manager, CloudWatch
 # Logs, Comprehend, SES, Bedrock, S3) and the database port to the DB security
 # group only.
 # ---------------------------------------------------------------------------

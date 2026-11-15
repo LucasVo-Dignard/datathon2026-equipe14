@@ -61,7 +61,7 @@ test('parsing helpers', () => {
 });
 
 test('models fill defaults and check required fields', () => {
-  const t = models.recommendationTrend({ symbol: 'X', period: '2026-11-01', provider: 'finnhub', buy: 3 });
+  const t = models.recommendationTrend({ symbol: 'X', period: '2026-11-01', provider: 'yahoo', buy: 3 });
   assert.equal(t.strongBuy, 0);
   assert.equal(models.recommendationTotal(t), 3);
   assert.ok(t.fetchedAt instanceof Date);
