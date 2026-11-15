@@ -12,6 +12,17 @@ That tool invokes the **AgentCore research harness** (`app/research.js`), which:
    (one search, a second only if the first gives nothing);
 4. returns a factual report with its sources.
 
+**Client's portfolio.** `app/portfolio-context.js` joins the logged-in client's
+positions (CAD values, gains, weights) with the database (`company_profiles`:
+sector, industry, country), computes the breakdowns by sector, industry, country
+and listing currency, and checks the investor profile's guardrails (largest
+sector, number of assets, crypto share, excluded activities mapped to database
+industries; volatility is not computed, the history being fictional). A compact
+summary is added to Claude's system prompt on every message; the full view is
+returned by the `get_portfolio_details` tool (no parameters: always the
+logged-in user's portfolio). For judgment requests, the summary is also given to
+the reviewer, which judges the data against the client's current exposure.
+
 **Similar companies.** For questions asking for similar companies,
 alternatives, competitors or peers, Claude first calls `find_similar_companies`
 (`app/peers.js`): a query on the environment's database (`company_profiles`,
@@ -51,7 +62,9 @@ app/bot.js (Claude, formatting) --research_company--> AgentCore harness "researc
                     | (managed KB, by symbol)   | (limited credits)     | (last resort)
 ```
 
-## Resources (environment `andre`, created with the AWS CLI)
+## Resources (created with the AWS CLI)
+
+### Environment `andre`
 
 Not managed by Terraform yet. All names start with `datathon2026-equipe14-andre`.
 
@@ -71,6 +84,20 @@ Not managed by Terraform yet. All names start with `datathon2026-equipe14-andre`
 | Gateway target `bigdata` | `FQZ7Y2EEGX`, MCP server `https://mcp.bigdata.com/`, key sent in `x-api-key` |
 | Gateway rate limit | 6 requests per minute on the `bigdata` target |
 | Web server permissions | Terraform, `infra/iam.tf` (`invoke-research-harness`, `save-research-reports`) |
+
+### Prod (created the same way, names without `-andre`)
+
+| Resource | Name / ID |
+| --- | --- |
+| S3 bucket | `datathon2026-equipe14-earnings-779846826297` (documents copied from andre) |
+| Knowledge base + data source | `datathon2026-equipe14-earnings` (`DVTBBDDY9J`), data source `2BU1C0DNEQ` |
+| Gateway (+ rate limit 6/min on `bigdata`) | `datathon2026-equipe14-research-zdjyrdguzu` |
+| Harnesses | `datathon2026_equipe14_research-31GGlB0x3A` (research), `datathon2026_equipe14_reviewer-cmgGIZ6oX5` (reviewer) |
+| IAM roles | `datathon2026-equipe14-kb`, `-gateway`, `-harness` |
+| Bigdata.com key | Secrets Manager `datathon2026-equipe14/bigdata-api-key`, credential provider `datathon2026-equipe14-bigdata` (same Bigdata.com account as andre) |
+
+On the prod EC2 the variables below are in `/etc/chatbot.env` (set through SSM,
+next to the alert settings), with `BIGDATA_DAILY_CALLS=9`.
 
 The app reads its configuration from environment variables: `RESEARCH_HARNESS_ARN`,
 `RESEARCH_REVIEWER_ARN` (peer review; unset = no review),

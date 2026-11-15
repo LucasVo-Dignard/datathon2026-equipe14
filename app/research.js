@@ -245,14 +245,18 @@ const isReviewEnabled = () => Boolean(REVIEWER_ARN);
  * Peer-reviews the data the research agent selected for a proposal. Returns
  * { review, tools }: review starts with "VERDICT: SOLID | PARTIAL | WEAK".
  */
-async function reviewResearch({ proposal, reports, onTool = null }) {
+async function reviewResearch({ proposal, reports, portfolio = '', onTool = null }) {
   if (!isReviewEnabled()) throw new Error('RESEARCH_REVIEWER_ARN is not set');
   const body = reports
     .map((r, i) => `=== Report ${i + 1}: ${r.subject} (question: ${r.question}) ===\n${r.report}`)
     .join('\n\n');
   const { text: review, tools, stopReason } = await runHarness(
     REVIEWER_ARN,
-    `Today's date: ${today()}\nInvestor's proposal or question: ${proposal}\n\n${body}`,
+    `Today's date: ${today()}\nInvestor's proposal or question: ${proposal}\n\n`
+      + (portfolio
+        ? `Investor's current portfolio (judge the data also against it: concentration, sector exposure, effect of the proposal):\n${portfolio}\n\n`
+        : '')
+      + body,
     {},
     onTool,
   );
