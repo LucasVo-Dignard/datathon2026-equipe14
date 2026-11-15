@@ -12,6 +12,9 @@
 
 const CURRENCY = 'CAD';
 const RANDOM_SIZE = 8;
+// Of which ETFs (the rest are stocks); fewer if not enough of them have a price.
+const RANDOM_FUNDS = 2;
+const RANDOM_STOCKS = RANDOM_SIZE - RANDOM_FUNDS;
 const MAX_QUANTITY = 1e7;
 // Cours gardés en mémoire quelques minutes : le tableau de bord ne relit pas tout à chaque affichage.
 const QUOTE_CACHE_MS = 5 * 60 * 1000;
@@ -237,16 +240,28 @@ function createPortfolioService({
     };
   }
 
-  // Quelques titres au hasard, chacun pour 1 500 à 8 000 $ environ, achetés
-  // (fictivement) entre 25 % sous et 20 % au-dessus du cours actuel.
+  // Portefeuille aléatoire : quelques actions tirées parmi les titres suivis,
+  // chacune pour 1 500 à 8 000 $ environ, et quelques FNB connus, plus gros
+  // (4 000 à 12 000 $, le cœur du portefeuille), achetés (fictivement) entre
+  // 25 % sous et 20 % au-dessus du cours actuel. On tire des candidats en trop :
+  // certains symboles n'ont pas de cours.
   async function randomHoldings() {
-    const candidates = await stocks.randomSymbols(RANDOM_SIZE + 4);
-    const priced = await Promise.all(candidates.map((s) => pricedQuote(s).catch((err) => {
+    const [stockCandidates, fundCandidates] = await Promise.all([
+      stocks.randomSymbols(RANDOM_STOCKS + 4),
+      stocks.randomFunds ? stocks.randomFunds(RANDOM_FUNDS + 2) : [],
+    ]);
+    const price = (symbols) => Promise.all(symbols.map((s) => pricedQuote(s).catch((err) => {
       log.error(`portfolio quote error (${s}):`, err.message);
       return null;
     })));
-    return priced.filter(Boolean).slice(0, RANDOM_SIZE).map((q) => {
-      const target = 1500 + random() * 6500;
+    const [pricedStocks, pricedFunds] = await Promise.all([price(stockCandidates), price(fundCandidates)]);
+    const funds = pricedFunds.filter(Boolean).slice(0, RANDOM_FUNDS);
+    const picked = [
+      ...pricedStocks.filter(Boolean).slice(0, RANDOM_SIZE - funds.length).map((q) => [q, 1500, 6500]),
+      ...funds.map((q) => [q, 4000, 8000]),
+    ];
+    return picked.map(([q, min, spread]) => {
+      const target = min + random() * spread;
       return {
         symbol: q.symbol,
         quantity: Math.max(1, Math.round(target / (q.price * q.rate))),
@@ -306,4 +321,4 @@ function createPortfolioService({
   };
 }
 
-module.exports = { createPortfolioService, parseQuantity, PortfolioError, RANDOM_SIZE };
+module.exports = { createPortfolioService, parseQuantity, PortfolioError, RANDOM_SIZE, RANDOM_FUNDS };

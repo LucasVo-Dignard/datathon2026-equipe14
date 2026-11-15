@@ -43,6 +43,29 @@ function shuffled(items) {
   return a;
 }
 
+// Well-known ETFs for random portfolios: Canadian all-in-one and index funds,
+// US index funds, plus a few sector funds so preference checks have something to find.
+const RANDOM_ETFS = [
+  'XEQT.TO', 'VEQT.TO', 'XGRO.TO', 'VGRO.TO', 'XBAL.TO', 'XIC.TO', 'VCN.TO', 'ZCN.TO', 'VFV.TO', 'ZSP.TO',
+  'XUS.TO', 'XEF.TO', 'XEC.TO', 'ZAG.TO', 'XBB.TO', 'ZEB.TO', 'XEG.TO', 'XIT.TO', 'ZWC.TO',
+  'SPY', 'VOO', 'VTI', 'QQQ', 'VXUS', 'IEMG', 'BND', 'XLE', 'XLV', 'ITA', 'VNQ',
+];
+
+// North American listing: no suffix (US) or a Canadian exchange suffix.
+const isNorthAmerican = (symbol) => !symbol.includes('.') || /\.(TO|V|NE|CN)$/i.test(symbol);
+// About a quarter international, the rest North American (our clients are Canadian).
+function mixListings(symbols, count) {
+  const na = symbols.filter(isNorthAmerican);
+  const intl = symbols.filter((s) => !isNorthAmerican(s));
+  const intlCount = Math.min(intl.length, Math.round(count / 4));
+  const picked = [...na.slice(0, count - intlCount), ...intl.slice(0, intlCount)];
+  // Not enough North American listings: fill with international ones.
+  picked.push(...intl.slice(intlCount, intlCount + count - picked.length));
+  return shuffled(picked);
+}
+
+const randomFunds = async (count) => shuffled(RANDOM_ETFS).slice(0, count);
+
 // A start close more than this before the requested date is a data gap, not a start.
 const MAX_START_GAP_DAYS = 10;
 // Fund holdings change slowly: re-fetch a composition once a week.
@@ -135,18 +158,14 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     return fresh ? toQuote(fresh) : null;
   }
 
-  // Titres suivis au hasard : d'abord ceux qui ont déjà un cours en base (pas
-  // d'appel à Yahoo pour les valoriser), en CAD ou USD de préférence.
+  // Titres suivis au hasard, parmi tous ceux de tracked_symbols (ceux sans
+  // cours sont chargés depuis Yahoo à la valorisation, puis gardés en base).
+  // Surtout des cotations canadiennes et américaines, avec un peu d'international.
   async function randomSymbols(count) {
     const { rows } = await pool.query(
-      `SELECT t.symbol
-         FROM tracked_symbols t
-         LEFT JOIN LATERAL (SELECT currency FROM price_bars p WHERE p.symbol = t.symbol
-                             ORDER BY date DESC LIMIT 1) last ON true
-        WHERE t.active
-        ORDER BY (last.currency IS NOT NULL) DESC, (last.currency IN ('CAD', 'USD')) DESC, random()
-        LIMIT $1`, [count]);
-    return rows.length ? rows.map((r) => r.symbol) : shuffled(FALLBACK_SYMBOLS).slice(0, count);
+      'SELECT symbol FROM tracked_symbols WHERE active ORDER BY random() LIMIT $1', [count * 4]);
+    if (!rows.length) return shuffled(FALLBACK_SYMBOLS).slice(0, count);
+    return mixListings(rows.map((r) => r.symbol), count);
   }
 
   // Price change since `fromDate` (ISO): from the stored bars, or from Yahoo
@@ -184,7 +203,7 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     }
   }
 
-  return { lookup, randomSymbols, changeSince, fund, close: () => pool.end() };
+  return { lookup, randomSymbols, randomFunds, changeSince, fund, close: () => pool.end() };
 }
 
 function createLiveLookup({ yahooClient, now }) {
@@ -221,6 +240,7 @@ function createLiveLookup({ yahooClient, now }) {
   return {
     lookup,
     randomSymbols: async (count) => shuffled(FALLBACK_SYMBOLS).slice(0, count),
+    randomFunds,
     changeSince: (symbol, fromDate) => yahooChange(history, symbol, fromDate),
     fund(symbol) {
       const hit = fundCache.get(symbol);
@@ -245,4 +265,4 @@ function createStockLookup({
     : createLiveLookup({ yahooClient, now });
 }
 
-module.exports = { createStockLookup, normalizeSymbol, STALE_MS };
+module.exports = { createStockLookup, normalizeSymbol, mixListings, RANDOM_ETFS, STALE_MS };

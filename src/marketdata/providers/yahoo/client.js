@@ -18,7 +18,8 @@ const INFO_MODULES = ['price', 'summaryDetail', 'financialData', 'defaultKeyStat
 const FUND_MODULES = ['quoteType', 'fundProfile', 'topHoldings'];
 const SUMMARY_MODULES = [...INFO_MODULES, ...FUND_MODULES, 'upgradeDowngradeHistory'];
 // Profile, metrics, price target and rating actions all read the same quote
-// summary: keep the last one briefly so a refresh costs a single request.
+// summary: keep each symbol's briefly so a refresh costs a single request,
+// even when several symbols load at once.
 const SUMMARY_TTL_MS = 60 * 1000;
 
 function defaultLibrary() {
@@ -45,7 +46,7 @@ class YahooClient {
     this.library = library || defaultLibrary();
     this.rateLimiter = rateLimiter;
     this.now = now;
-    this.cached = null; // { symbol, at, promise }
+    this.cached = new Map(); // symbol -> { at, promise }, kept SUMMARY_TTL_MS
   }
 
   // Quote summary (profile and key statistics) as one flat object. Unknown
@@ -149,17 +150,19 @@ class YahooClient {
 
   #summary(symbol) {
     const at = this.now();
-    if (this.cached && this.cached.symbol === symbol && at - this.cached.at < SUMMARY_TTL_MS) {
-      return this.cached.promise;
+    const hit = this.cached.get(symbol);
+    if (hit && at - hit.at < SUMMARY_TTL_MS) return hit.promise;
+    for (const [key, entry] of this.cached) {
+      if (at - entry.at >= SUMMARY_TTL_MS) this.cached.delete(key);
     }
     const promise = this.#call(symbol, (lib) => lib.quoteSummary(symbol, { modules: SUMMARY_MODULES }))
       .catch((err) => {
         if (err.notFound) return {};
         throw err;
       });
-    this.cached = { symbol, at, promise };
+    this.cached.set(symbol, { at, promise });
     promise.catch(() => {
-      if (this.cached?.promise === promise) this.cached = null;
+      if (this.cached.get(symbol)?.promise === promise) this.cached.delete(symbol);
     });
     return promise;
   }

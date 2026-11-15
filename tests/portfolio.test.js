@@ -3,7 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPortfolioStore } = require('../app/portfolio-store');
-const { createPortfolioService, parseQuantity, RANDOM_SIZE } = require('../app/portfolio');
+const { createPortfolioService, parseQuantity, RANDOM_SIZE, RANDOM_FUNDS } = require('../app/portfolio');
+const { mixListings, RANDOM_ETFS } = require('../app/stocks');
 
 const QUOTES = {
   'RY.TO': { symbol: 'RY.TO', name: 'Royal Bank', currency: 'CAD', price: 170, change: 2 },
@@ -50,6 +51,40 @@ test('random portfolio picks priced symbols and values them in CAD', async () =>
   assert.ok(p.summary.cash > 0);
   assert.ok(p.history.length > 200);
   assert.equal(db.users.alice.createdAt, 1, 'keeps existing user fields');
+});
+
+test('random portfolio mixes stocks and ETFs, ETFs sized as the core', async () => {
+  const db = { users: {}, sessions: {}, chats: {} };
+  const store = createPortfolioStore({ db, saveDb: () => {}, connectionString: '' });
+  const quotes = {
+    ...QUOTES,
+    'XEQT.TO': { symbol: 'XEQT.TO', name: 'iShares Core Equity', currency: 'CAD', price: 40, change: 0 },
+    QQQ: { symbol: 'QQQ', name: 'Invesco QQQ', currency: 'USD', price: 500, change: 0 },
+  };
+  const stocks = {
+    async lookup(symbol) { return quotes[symbol] || null; },
+    async randomSymbols(n) { return ['RY.TO', 'AAPL', 'NOPE', 'VOD.L'].slice(0, n); },
+    async randomFunds(n) { return ['GONE', 'XEQT.TO', 'QQQ', 'XEG.TO'].slice(0, n); },
+    async fund(symbol) { return ['XEQT.TO', 'QQQ'].includes(symbol) ? { type: 'ETF', sectorWeights: {}, topHoldings: [] } : null; },
+  };
+  const service = createPortfolioService({ store, stocks, random: () => 0.5, log: { error() {} } });
+  const p = await service.create('bob', 'random');
+  assert.deepEqual(p.holdings.map((h) => h.symbol).sort(), ['AAPL', 'QQQ', 'RY.TO', 'VOD.L', 'XEQT.TO']);
+  assert.equal(p.holdings.filter((h) => h.fund).length, RANDOM_FUNDS);
+  const xeqt = p.holdings.find((h) => h.symbol === 'XEQT.TO');
+  assert.equal(xeqt.quantity, 200); // (4000 + 0.5 × 8000) / 40
+  assert.equal(p.holdings.find((h) => h.symbol === 'RY.TO').quantity, 28); // (1500 + 0.5 × 6500) / 170
+});
+
+test('random symbols: mostly North American listings, about a quarter international', () => {
+  const pool = ['0669.HK', 'AAPL', 'RY.TO', '603288.SS', 'MSFT', 'SHOP.TO', 'GULF.BK', 'CVX', 'DOL.TO', 'VOD.L', 'IX', 'CCL'];
+  const picked = mixListings(pool, 8);
+  assert.equal(picked.length, 8);
+  assert.equal(new Set(picked).size, 8);
+  assert.equal(picked.filter((s) => /\.(HK|SS|BK|L)$/.test(s)).length, 2);
+  // Too few North American listings: international ones fill the gap.
+  assert.equal(mixListings(['0669.HK', '603288.SS', 'GULF.BK', 'AAPL'], 4).length, 4);
+  assert.ok(RANDOM_ETFS.length >= 20 && new Set(RANDOM_ETFS).size === RANDOM_ETFS.length);
 });
 
 test('custom portfolio: add, edit the quantity, remove', async () => {
