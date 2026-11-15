@@ -83,6 +83,11 @@ const QUESTIONS = [
       ['energy', 'Énergie'], ['finance', 'Banques et assurances'], ['consumer', 'Consommation'],
       ['industry', 'Industrie et transport'], ['realEstate', 'Immobilier'],
       ['gold', 'Or et matières premières']] },
+  { id: 'regions', section: 'Vos préférences', kind: 'multi', optional: true,
+    text: 'Dans quelles régions souhaitez-vous investir ?',
+    help: 'Plusieurs choix possibles. Laissez vide si vous n’avez pas de préférence.',
+    options: [['canada', 'Canada'], ['usa', 'États-Unis'], ['europe', 'Europe'],
+      ['asiaPacific', 'Asie-Pacifique développée (Japon, Australie…)'], ['emerging', 'Marchés émergents (Chine, Inde, Brésil…)']] },
   { id: 'style', section: 'Vos préférences', kind: 'pref', text: 'Quel type d’entreprises préférez-vous ?',
     options: [['established', 'Des entreprises établies dont je comprends le modèle'],
       ['mix', 'Un mélange des deux'], ['growth', 'Des entreprises en forte croissance et innovantes']] },
@@ -112,21 +117,21 @@ const PERSONAS = [
     tests: 'Un profil agressif ne veut pas dire « tout est permis » : la diversification reste respectée.',
     answers: { age: 'lt30', dependents: '0', savingsShare: '25-50', experience: 'intermediate', capital: 25000,
       objective: 'growth', horizon: 'gt12', drawdown: 'buy', maxLoss: '35', tradeoff: 'mostlyGrowth',
-      hype: 'sometimes', sectors: ['tech', 'health', 'finance'], style: 'growth', diversification: 'convictions',
+      hype: 'sometimes', sectors: ['tech', 'health', 'finance'], regions: ['usa', 'canada', 'asiaPacific', 'emerging'], style: 'growth', diversification: 'convictions',
       crypto: 'strong', esg: 'medium', exclusions: [] } },
   { id: 'mateo', name: 'Mateo', age: 41, job: 'Gestionnaire des opérations', risk: 'Modéré', horizon: '8 à 12 ans',
     summary: 'Croissance équilibrée, forte importance de l’ESG, évite les controverses et la spéculation.',
     tests: 'Le système doit intégrer les préférences personnelles, pas seulement le rendement et le risque.',
     answers: { age: '30-44', dependents: '1-2', savingsShare: '25-50', experience: 'intermediate', capital: 60000,
       objective: 'balanced', horizon: '9-12', drawdown: 'hold', maxLoss: '20', tradeoff: 'balance',
-      hype: 'never', sectors: ['tech', 'health', 'consumer'], style: 'mix', diversification: 'broad',
+      hype: 'never', sectors: ['tech', 'health', 'consumer'], regions: ['canada', 'usa', 'europe'], style: 'mix', diversification: 'broad',
       crypto: 'none', esg: 'high', exclusions: ['fossil', 'weapons', 'controversies'] } },
   { id: 'robert', name: 'Robert', age: 59, job: 'Professionnel de la santé', risk: 'Faible à modéré', horizon: '3 à 5 ans',
     summary: 'Proche de la retraite : préserver le capital, entreprises établies, mais parfois tenté par un titre médiatisé.',
     tests: 'Le système doit relever les demandes en conflit avec le profil plutôt que simplement acquiescer.',
     answers: { age: '45-59', dependents: '0', savingsShare: '50-75', experience: 'advanced', capital: 400000,
       objective: 'preserve', horizon: '3-5', drawdown: 'sellPart', maxLoss: '10', tradeoff: 'mostlyStable',
-      hype: 'often', sectors: ['health', 'finance', 'consumer'], style: 'established', diversification: 'broad',
+      hype: 'often', sectors: ['health', 'finance', 'consumer'], regions: ['canada', 'usa'], style: 'established', diversification: 'broad',
       crypto: 'none', esg: 'medium', exclusions: [] } },
 ];
 
@@ -247,6 +252,11 @@ function findTensions(a, s) {
     add('info', `Intérêt pour un seul secteur : ${label('sectors', a.sectors[0])}`,
       'Un profil élevé ne signifie pas « tout dans un secteur » : ce secteur sera mis en avant sans dépasser une part raisonnable.');
   }
+  if (a.regions.length === 1) {
+    add('info', `Une seule région : ${label('regions', a.regions[0])}`,
+      'Investir dans une seule région concentre le risque économique et monétaire. Les analyses privilégieront cette région '
+      + 'tout en signalant l’intérêt d’une exposition internationale.');
+  }
   if (a.experience === 'none' && s.tolerance.score >= 60) {
     add('info', 'Peu d’expérience pour un profil audacieux',
       'Les explications de l’assistant seront plus détaillées sur la volatilité et les pertes possibles.');
@@ -276,6 +286,7 @@ function buildProfile(answers) {
     horizon: { id: answers.horizon, label: label('horizon', answers.horizon) },
     preferences: {
       sectors: answers.sectors.map((v) => label('sectors', v)),
+      regions: answers.regions.map((v) => label('regions', v)),
       style: label('style', answers.style),
       diversification: label('diversification', answers.diversification),
       crypto: label('crypto', answers.crypto),
@@ -290,6 +301,7 @@ function buildProfile(answers) {
       maxSingleSectorShare: s.score >= 60 ? 35 : 25,
       minDiversifiedAssets: 5,
       excludedActivities: answers.exclusions,
+      regions: answers.regions,
     },
     tensions: findTensions(answers, s),
     closestPersona: match[0],
@@ -305,6 +317,7 @@ function profileSummary(p) {
     `Niveau de risque : ${p.level.label} (score ${p.score}/100, tolérance ${p.tolerance.score}, capacité ${p.capacity.score}).`,
     `Objectif : ${p.objective.label}. Horizon : ${p.horizon.label}.`,
     `Secteurs d’intérêt : ${p.preferences.sectors.join(', ') || 'aucune préférence'}. Style : ${p.preferences.style}.`,
+    `Régions visées : ${p.preferences.regions?.join(', ') || 'aucune préférence'}.`,
     `Diversification : ${p.preferences.diversification}. Cryptoactifs : ${p.preferences.crypto}. ESG : ${p.preferences.esg}.`,
     `Exclusions : ${p.preferences.exclusions.join(', ') || 'aucune'}.`,
     `Garde-fous : volatilité annuelle ≤ ${g.maxAnnualVolatility} %, cryptoactifs ≤ ${g.maxCryptoShare} %, `
