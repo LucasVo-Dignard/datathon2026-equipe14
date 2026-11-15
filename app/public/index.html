@@ -14,8 +14,14 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <!-- Opening animation: COURTAGE → COURTIAGE -->
+  <div id="intro" class="intro" aria-hidden="true">
+    <div class="intro-word">COURT<span class="intro-swap"><span class="intro-a">A</span><span class="intro-ia">IA</span></span>GE DIRECT</div>
+  </div>
+
   <!-- Login -->
   <main id="login-view" class="login" hidden>
+    <header class="login-brand"><span>COURT<span class="brand-ia">IA</span>GE DIRECT</span></header>
     <form id="login-form" class="login-card">
       <h1>Mon portefeuille</h1>
       <p class="muted">Prototype – connectez-vous avec un nom d'utilisateur.<br>Le compte est créé automatiquement.</p>
@@ -29,7 +35,7 @@
   <!-- App -->
   <div id="app-view" class="app" data-tab="portfolio" hidden>
     <header class="topbar">
-      <span class="brand">Mon portefeuille</span>
+      <span class="brand">COURT<span class="brand-ia">IA</span>GE DIRECT</span>
       <nav class="top-tabs" aria-label="Sections">
         <button data-tab="portfolio" aria-pressed="true">Portefeuille</button>
         <button data-tab="profile" aria-pressed="false">Mon profil <span class="badge todo" data-profile-badge>À compléter</span></button>
@@ -257,6 +263,7 @@
     </div>
   </dialog>
 
+  <script src="/intro.js"></script>
   <script src="/dashboard.js"></script>
   <script src="/notifications-ui.js"></script>
   <script src="/profile-ui.js"></script>
