@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPortfolioStore } = require('../app/portfolio-store');
 const { createPortfolioService, parseQuantity, RANDOM_SIZE, RANDOM_FUNDS } = require('../app/portfolio');
-const { mixListings, RANDOM_ETFS } = require('../app/stocks');
+const { tradable, RANDOM_ETFS } = require('../app/stocks');
 
 const QUOTES = {
   'RY.TO': { symbol: 'RY.TO', name: 'Royal Bank', currency: 'CAD', price: 170, change: 2 },
@@ -76,14 +76,14 @@ test('random portfolio mixes stocks and ETFs, ETFs sized as the core', async () 
   assert.equal(p.holdings.find((h) => h.symbol === 'RY.TO').quantity, 28); // (1500 + 0.5 × 6500) / 170
 });
 
-test('random symbols: mostly North American listings, about a quarter international', () => {
-  const pool = ['0669.HK', 'AAPL', 'RY.TO', '603288.SS', 'MSFT', 'SHOP.TO', 'GULF.BK', 'CVX', 'DOL.TO', 'VOD.L', 'IX', 'CCL'];
-  const picked = mixListings(pool, 8);
-  assert.equal(picked.length, 8);
-  assert.equal(new Set(picked).size, 8);
-  assert.equal(picked.filter((s) => /\.(HK|SS|BK|L)$/.test(s)).length, 2);
-  // Too few North American listings: international ones fill the gap.
-  assert.equal(mixListings(['0669.HK', '603288.SS', 'GULF.BK', 'AAPL'], 4).length, 4);
+test('random symbols: one batch request keeps only the ones Yahoo prices, in drawn order', async () => {
+  const calls = [];
+  const client = { async quotes(symbols) {
+    calls.push(symbols);
+    return [{ symbol: 'RY.TO', price: 288 }, { symbol: 'DEAD', price: null }, { symbol: '0669.HK', price: 141 }, { symbol: 'AAPL', price: 356 }];
+  } };
+  assert.deepEqual(await tradable(client, ['0669.HK', 'DEAD', 'GONE', 'RY.TO', 'AAPL'], 2), ['0669.HK', 'RY.TO']);
+  assert.equal(calls.length, 1);
   assert.ok(RANDOM_ETFS.length >= 20 && new Set(RANDOM_ETFS).size === RANDOM_ETFS.length);
 });
 

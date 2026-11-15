@@ -51,20 +51,14 @@ const RANDOM_ETFS = [
   'SPY', 'VOO', 'VTI', 'QQQ', 'VXUS', 'IEMG', 'BND', 'XLE', 'XLV', 'ITA', 'VNQ',
 ];
 
-// North American listing: no suffix (US) or a Canadian exchange suffix.
-const isNorthAmerican = (symbol) => !symbol.includes('.') || /\.(TO|V|NE|CN)$/i.test(symbol);
-// About a quarter international, the rest North American (our clients are Canadian).
-function mixListings(symbols, count) {
-  const na = symbols.filter(isNorthAmerican);
-  const intl = symbols.filter((s) => !isNorthAmerican(s));
-  const intlCount = Math.min(intl.length, Math.round(count / 4));
-  const picked = [...na.slice(0, count - intlCount), ...intl.slice(0, intlCount)];
-  // Not enough North American listings: fill with international ones.
-  picked.push(...intl.slice(intlCount, intlCount + count - picked.length));
-  return shuffled(picked);
+// The first `count` of `symbols` (in their order) that Yahoo prices, checked
+// with one batch request instead of loading each symbol.
+async function tradable(yahooClient, symbols, count) {
+  const priced = new Set((await yahooClient.quotes(symbols)).filter((q) => q.price > 0).map((q) => q.symbol));
+  return symbols.filter((s) => priced.has(s)).slice(0, count);
 }
 
-const randomFunds = async (count) => shuffled(RANDOM_ETFS).slice(0, count);
+const randomFunds = (yahooClient) => (count) => tradable(yahooClient, shuffled(RANDOM_ETFS).slice(0, count * 3), count);
 
 // A start close more than this before the requested date is a data gap, not a start.
 const MAX_START_GAP_DAYS = 10;
@@ -158,14 +152,14 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     return fresh ? toQuote(fresh) : null;
   }
 
-  // Titres suivis au hasard, parmi tous ceux de tracked_symbols (ceux sans
-  // cours sont chargés depuis Yahoo à la valorisation, puis gardés en base).
-  // Surtout des cotations canadiennes et américaines, avec un peu d'international.
+  // Titres suivis tirés au hasard parmi tous ceux de tracked_symbols, quelle que
+  // soit la région. Une seule requête Yahoo groupée écarte ceux qui n'ont pas
+  // de cours ; les autres sont chargés à la valorisation, puis gardés en base.
   async function randomSymbols(count) {
     const { rows } = await pool.query(
-      'SELECT symbol FROM tracked_symbols WHERE active ORDER BY random() LIMIT $1', [count * 4]);
+      'SELECT symbol FROM tracked_symbols WHERE active ORDER BY random() LIMIT $1', [count * 3]);
     if (!rows.length) return shuffled(FALLBACK_SYMBOLS).slice(0, count);
-    return mixListings(rows.map((r) => r.symbol), count);
+    return tradable(yahooClient, rows.map((r) => r.symbol), count);
   }
 
   // Price change since `fromDate` (ISO): from the stored bars, or from Yahoo
@@ -203,7 +197,7 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     }
   }
 
-  return { lookup, randomSymbols, randomFunds, changeSince, fund, close: () => pool.end() };
+  return { lookup, randomSymbols, randomFunds: randomFunds(yahooClient), changeSince, fund, close: () => pool.end() };
 }
 
 function createLiveLookup({ yahooClient, now }) {
@@ -240,7 +234,7 @@ function createLiveLookup({ yahooClient, now }) {
   return {
     lookup,
     randomSymbols: async (count) => shuffled(FALLBACK_SYMBOLS).slice(0, count),
-    randomFunds,
+    randomFunds: randomFunds(yahooClient),
     changeSince: (symbol, fromDate) => yahooChange(history, symbol, fromDate),
     fund(symbol) {
       const hit = fundCache.get(symbol);
@@ -265,4 +259,4 @@ function createStockLookup({
     : createLiveLookup({ yahooClient, now });
 }
 
-module.exports = { createStockLookup, normalizeSymbol, mixListings, RANDOM_ETFS, STALE_MS };
+module.exports = { createStockLookup, normalizeSymbol, tradable, RANDOM_ETFS, STALE_MS };

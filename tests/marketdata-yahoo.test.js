@@ -197,6 +197,23 @@ test('fund composition: sector keys mapped, holdings sorted, stocks are not fund
   await assert.rejects(new YahooFundCompositionFetcher(new FakeYahooClient()).fetch('NOPE'), SymbolNotFoundError);
 });
 
+test('client prices many symbols with one batch quote request', async () => {
+  const seen = [];
+  const library = {
+    async quote(symbols, options) {
+      seen.push([symbols, options]);
+      return [{ symbol: 'AAPL', quoteType: 'EQUITY', currency: 'USD', regularMarketPrice: 356, regularMarketPreviousClose: 354, longName: 'Apple Inc.' }];
+    },
+  };
+  const client = new YahooClient({ library });
+  assert.deepEqual(await client.quotes(['AAPL', 'NOPE']), [
+    { symbol: 'AAPL', quoteType: 'EQUITY', currency: 'USD', price: 356, previousClose: 354, name: 'Apple Inc.' },
+  ]);
+  assert.deepEqual(seen, [[['AAPL', 'NOPE'], { return: 'array' }]]);
+  assert.deepEqual(await client.quotes([]), []);
+  assert.equal(seen.length, 1);
+});
+
 test('client reads fund modules from the same quote summary', async () => {
   const library = fakeLibrary({
     summary: {

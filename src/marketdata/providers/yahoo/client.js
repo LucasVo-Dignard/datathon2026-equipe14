@@ -128,6 +128,27 @@ class YahooClient {
     };
   }
 
+  // Latest price of many symbols in one request: [{ symbol, quoteType,
+  // currency, price, previousClose, name }]. Unknown symbols are left out.
+  async quotes(symbols) {
+    if (!symbols.length) return [];
+    let rows;
+    try {
+      rows = await this.#call(symbols.join(','), (lib) => lib.quote(symbols, { return: 'array' }));
+    } catch (err) {
+      if (err.notFound) return [];
+      throw err;
+    }
+    return (rows || []).filter((q) => q?.symbol).map((q) => ({
+      symbol: q.symbol,
+      quoteType: q.quoteType || null,
+      currency: q.currency || null,
+      price: q.regularMarketPrice ?? null,
+      previousClose: q.regularMarketPreviousClose ?? null,
+      name: q.longName || q.shortName || null,
+    }));
+  }
+
   // Latest news Yahoo links to a symbol: [{ id, title, publisher, url,
   // publishedAt (Date), relatedSymbols }]. Unknown symbols give no news.
   async news(symbol, count = 5) {

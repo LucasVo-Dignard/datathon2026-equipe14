@@ -16,7 +16,7 @@ const { DateRange, addDays, today: localToday } = require('./values');
 const LOOKBACK_DAYS = 7;
 const EARNINGS_AHEAD_DAYS = 90;
 // Yahoo has no published quota; stay well below where it starts throttling.
-const YAHOO_CALLS_PER_MINUTE = 30;
+const YAHOO_CALLS_PER_MINUTE = 60;
 
 // A step is [name, async (db, symbol) => void].
 function yahooSteps(client, { today = localToday(), priceDays = LOOKBACK_DAYS } = {}) {

@@ -243,12 +243,12 @@ function createPortfolioService({
   // Portefeuille aléatoire : quelques actions tirées parmi les titres suivis,
   // chacune pour 1 500 à 8 000 $ environ, et quelques FNB connus, plus gros
   // (4 000 à 12 000 $, le cœur du portefeuille), achetés (fictivement) entre
-  // 25 % sous et 20 % au-dessus du cours actuel. On tire des candidats en trop :
-  // certains symboles n'ont pas de cours.
+  // 25 % sous et 20 % au-dessus du cours actuel. Les candidats ont déjà un cours
+  // (requête groupée) : un seul de réserve, au cas où le chargement échoue.
   async function randomHoldings() {
     const [stockCandidates, fundCandidates] = await Promise.all([
-      stocks.randomSymbols(RANDOM_STOCKS + 4),
-      stocks.randomFunds ? stocks.randomFunds(RANDOM_FUNDS + 2) : [],
+      stocks.randomSymbols(RANDOM_STOCKS + 1),
+      stocks.randomFunds ? stocks.randomFunds(RANDOM_FUNDS + 1) : [],
     ]);
     const price = (symbols) => Promise.all(symbols.map((s) => pricedQuote(s).catch((err) => {
       log.error(`portfolio quote error (${s}):`, err.message);

@@ -38,7 +38,7 @@ function parse(argv) {
   return { limit, skipExisting: values['skip-existing'], dryRun: values['dry-run'] };
 }
 
-// One-off job, so it can go faster than the daily job's 30 calls a minute.
+// One-off job, at the same 60 calls a minute as the daily job and the app.
 const CALLS_PER_MINUTE = 60;
 
 const billions = (usd) => `${(usd / 1e9).toFixed(1)}B USD`;

@@ -108,10 +108,12 @@ database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`
 
 The first time the user opens the Portefeuille tab, they choose how to start:
 
-- **Random**: 8 symbols picked at random from `tracked_symbols` (those that already
-  have prices in `price_bars` first, CAD/USD preferred), each worth about
-  1 500–8 000 $, with a simulated purchase cost (25 % below to 20 % above the
-  current price) and some cash. Without a database, it picks from the V3 starter list.
+- **Random**: 6 stocks drawn purely at random from all active `tracked_symbols` (any
+  region), each worth about 1 500–8 000 $, plus 2 well-known ETFs (`RANDOM_ETFS` in
+  `stocks.js`) of about 4 000–12 000 $, with a simulated purchase cost (25 % below to
+  20 % above the current price) and some cash. One batch Yahoo request (`quote` on all
+  the candidates) drops symbols without a price; the others are loaded on valuation and
+  then kept. Without a database, stocks come from the V3 starter list.
 - **Custom**: an empty portfolio. The user adds symbols with a quantity below the
   "Mes actions" table; the purchase cost is the current price.
 

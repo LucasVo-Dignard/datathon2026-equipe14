@@ -26,7 +26,7 @@ const { newYahooClient } = require('../refresh');
 
 const RETENTION_DAYS = 30;
 const YAHOO_NEWS_PER_SYMBOL = 5;
-const MAX_YAHOO_SYMBOLS = 80; // ~80 calls at 30/min: under 3 minutes
+const MAX_YAHOO_SYMBOLS = 80; // ~80 calls at 60/min: under 2 minutes
 const MAX_ENRICH_PER_RUN = 150; // caps Comprehend costs per run
 
 const stamp = (level) => (message) => console.log(`${new Date().toISOString()} ${level} ${message}`);
