@@ -26,8 +26,9 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 
 | Onglet ou fonction | Ce qu'elle fait | Code |
 | --- | --- | --- |
-| **Mon profil** | 17 questions, ou un persona du cas (Amira, Mateo, Robert). Le niveau de risque est le plus prudent entre la tolérance et la capacité, plafonné par l'objectif. Le résultat est expliqué : facteurs, tensions entre les réponses, garde-fous pour l'agent, persona le plus proche | `app/profile.js` |
-| **Rapports** | Rapports quotidiens, hebdomadaires, mensuels et annuels, rédigés par l'agent à partir des données | `app/reports.js` |
+| **Mon profil** | 18 questions (dont 4 facultatives), ou un persona du cas (Amira, Mateo, Robert). Le niveau de risque est le plus prudent entre la tolérance et la capacité, plafonné par l'objectif. Le résultat est expliqué : facteurs, tensions entre les réponses, garde-fous pour l'agent, persona le plus proche | `app/profile.js` |
+| **Portefeuille** | Portefeuille simulé, aléatoire ou composé par le client, avec graphique, news liées aux titres détenus et recherche de titres | `app/portfolio.js`, `app/news.js`, `app/stocks.js` |
+| **Rapports** | Rapports quotidiens, hebdomadaires, mensuels et annuels, rédigés par l'agent à partir des données. Le client peut les programmer avec l'assistant : un job Batch horaire rédige ceux qui sont dus, signalés par un badge « Nouveau » | `app/reports.js`, `app/report-generator.js`, `app/report-schedule.js`, `app/report-schedule-store.js`, `app/jobs/scheduled-reports.js` |
 | **Assistant** | Agent Claude (Bedrock) qui connaît le profil et le portefeuille. Il fait des recherches avec AgentCore (base de connaissances, Bigdata.com, recherche web) et fait relire ses jugements par un second agent | `app/bot.js`, `agents/` |
 | **Alertes de prix** | Un courriel (Amazon SES) quand un titre détenu varie de 2 à 7 % ou plus dans la journée, selon le niveau de risque. Jamais deux fois la même alerte, et désabonnement en un clic | `app/notifications.js`, `src/marketdata/jobs/price-alerts.js` |
 
@@ -38,9 +39,9 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | Service | Rôle |
 | --- | --- |
 | **EC2**, **ECR** | Serveur web. L'app tourne dans un conteneur tiré d'un dépôt ECR privé |
-| **RDS PostgreSQL 17** | Données de marché, profils, portefeuilles, conversations, alertes, news. Base privée |
+| **RDS PostgreSQL 17** | Données de marché, compositions de FNB, utilisateurs et sessions, profils, portefeuilles, conversations, alertes, news, programmation des rapports. Base privée |
 | **Secrets Manager** | Mot de passe de RDS, généré et renouvelé par RDS, et lu au démarrage par le serveur et par les jobs sans jamais être écrit sur disque. Clé API Bigdata.com de l'agent de recherche |
-| **AWS Batch (Fargate)** + **EventBridge Scheduler** | Mise à jour quotidienne des données et des alertes, et des news toutes les 2 h |
+| **AWS Batch (Fargate)** + **EventBridge Scheduler** | Mise à jour des données et des alertes (jours de semaine à 18 h, heure de Toronto), des news toutes les 2 h, et rapports programmés toutes les heures |
 | **Amazon Bedrock** + **Bedrock AgentCore** | Agent conversationnel (Claude), agent de recherche, relecture |
 | **Amazon Bedrock Knowledge Bases** | Base de connaissances de l'agent de recherche : communiqués de résultats (SEC EDGAR) et rapports de recherche déjà produits, filtrables par titre. Les documents sources sont dans S3 |
 | **Amazon Comprehend** | Ton des articles et sociétés nommées, pour rattacher les news aux titres |
@@ -55,11 +56,11 @@ ordre : `infra/` (réseau, EC2, ECR, SES, S3), `infra-db/` (RDS) et `infra-batch
 
 Trois agents sur Amazon Bedrock :
 
-| Agent | Où | Rôle |
-| --- | --- | --- |
-| **Assistant** | `app/bot.js` | Répond au client en Markdown. Il connaît son profil et son portefeuille, et a trois outils : `research_company` (lance l'agent de recherche), `find_similar_companies` (sociétés comparables, tirées de la base) et `get_portfolio_details`. Il rédige aussi les rapports. Un refus est relancé sur Claude Opus 4.8 |
-| **Recherche** | harness AgentCore, appelé par `app/research.js` | Cherche les faits sur une société et renvoie un rapport sourcé |
-| **Relecteur** | harness AgentCore | Pour les questions de jugement seulement (acheter, vendre, est-ce risqué…) : évalue la qualité, la fraîcheur et l'équilibre des sources, et rend un verdict (`SOLID`, `PARTIAL`, `WEAK`) avec des points de vigilance |
+| Agent | Rôle |
+| --- | --- |
+| **Assistant** | Répond au client. Il connaît son profil et son portefeuille, et a quatre outils : `research_company` (lance l'agent de recherche, si `RESEARCH_HARNESS_ARN` est défini), `find_similar_companies` (sociétés comparables, tirées de la base, donc avec une base seulement), `get_portfolio_details` et `set_report_schedule` (programme les rapports). Il rédige aussi les rapports. Un refus est relancé sur Claude Opus 4.8 |
+| **Recherche** | Cherche les faits sur une société et renvoie un rapport sourcé |
+| **Relecteur** | Pour les questions de jugement seulement (acheter, vendre, est-ce risqué…) : évalue la qualité, la fraîcheur et l'équilibre des sources, et rend un verdict (`SOLID`, `PARTIAL`, `WEAK`) avec des points de vigilance |
 
 **Sources de l'agent de recherche**, derrière une AgentCore Gateway (authentification
 IAM), dans l'ordre :
@@ -111,7 +112,7 @@ données de départ du cas n'est pas utilisé. Chaque valeur garde sa source et 
 
 | Source | Données | Accès | Où |
 | --- | --- | --- | --- |
-| **Yahoo Finance** (`yahoo-finance2`) | Cours quotidiens ajustés, profils, indicateurs, objectifs et notes d'analystes, compositions de FNB, taux de change (`USDCAD=X`), news par titre | Sans clé. Débit limité à 30 appels/min dans le job | `src/marketdata/providers/yahoo/` |
+| **Yahoo Finance** (`yahoo-finance2`) | Cours quotidiens ajustés, profils, indicateurs, objectifs et notes d'analystes, compositions de FNB, taux de change (`USDCAD=X`), news par titre | Sans clé. Débit limité à 60 appels/min dans le job | `src/marketdata/providers/yahoo/` |
 | **companiesmarketcap.com** | Classement mondial des capitalisations (≈ 1 000 sociétés suivies) | CSV public | `src/marketdata/providers/companiesmarketcap/` |
 | **CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch** | Titres, extraits de 400 caractères au plus, liens, dans leur langue d'origine | Flux RSS publics. On ne garde que le titre, l'extrait et le lien vers l'éditeur | `src/marketdata/news/feeds.js` |
 | **SEC EDGAR** | Communiqués de résultats (8-K, pièce 99.1), versés dans la base de connaissances de l'agent | Public | `agents/knowledge-base/` |
@@ -146,7 +147,8 @@ intégral, et les articles de plus de 30 jours sont supprimés. Conditions :
 ## Configuration
 
 **Identifiants : jamais dans Git.** Tous les fichiers `.env*` sont ignorés par Git,
-de même que `*.tfvars`, `*.tfstate` et `*.pem`.
+sauf le modèle `.env-dev.example`. Dans les dossiers `infra*/`, `*.tfvars`,
+`*.tfstate` et `*.pem` le sont aussi.
 
 | Fichier | Contenu |
 | --- | --- |
@@ -162,28 +164,36 @@ prod, dans le même compte AWS. `TF_WORKSPACE` le choisit pour Terraform,
 `db/migrate.py` et les scripts. Sans elle, rien ne touche la prod : Terraform exige
 `-var confirm_prod=true` et les scripts refusent de tourner.
 
-**Variables de l'app et des jobs.** Sur AWS, elles sont toutes posées
-automatiquement : le serveur construit `DATABASE_URL` depuis RDS et Secrets Manager,
-Terraform et `scripts/deploy-app.sh` remplissent `/etc/chatbot.env`, et Terraform la
-définition du job. En local, elles sont toutes optionnelles.
+**Variables de l'app et des jobs.** Sur AWS, la plupart sont posées
+automatiquement : le script `chatbot-db-env` de l'EC2 construit `DATABASE_URL` depuis
+RDS et Secrets Manager, Terraform et `scripts/deploy-app.sh` remplissent
+`/etc/chatbot.env`, et Terraform la définition du job. `BIGDATA_DAILY_CALLS` se règle
+à la main dans `/etc/chatbot.env`, `AGENT_*` gardent leurs valeurs par défaut et
+`FINNHUB_API_KEY` n'est pas définie sur AWS. En local, elles sont toutes optionnelles.
 
 | Variable | Défaut | Effet |
 | --- | --- | --- |
 | `PORT` | `3000` | Port HTTP de l'app |
 | `DATABASE_URL` | non défini → fichier JSON | PostgreSQL. Sans elle, tout est stocké dans `app/data/db.json` |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SECRET_ARN` | non définis | Jobs seulement, à la place de `DATABASE_URL` : le mot de passe est lu dans Secrets Manager (`src/marketdata/db/connection.js`) |
 | `DATA_FILE` | `app/data/db.json` | Fichier JSON du mode sans base |
-| `AWS_REGION` | `us-east-1` | Région des SDK AWS |
-| `AGENT_MODEL`, `AGENT_EFFORT` | `anthropic.claude-opus-5-5`, `low` | Modèle et effort de l'agent conversationnel |
-| `RESEARCH_HARNESS_ARN`, `RESEARCH_REVIEWER_ARN`, `RESEARCH_KB_*`, `RESEARCH_GATEWAY_URL`, `BIGDATA_DAILY_CALLS` | non définis → recherche désactivée | Agent de recherche AgentCore (voir [Agents](#agents)) |
+| `AWS_REGION` | `AWS_DEFAULT_REGION`, sinon `us-east-1` | Région de Bedrock, d'AgentCore et du stockage S3 des rapports |
+| `AGENT_MODEL`, `AGENT_EFFORT` | `anthropic.claude-opus-5-5`, `low` | Modèle et effort de l'agent conversationnel et de la rédaction des rapports |
+| `RESEARCH_HARNESS_ARN` | non défini → recherche désactivée | Agent de recherche AgentCore (voir [Agents](#agents)) |
+| `RESEARCH_REVIEWER_ARN` | non défini → pas de relecture | Agent relecteur |
+| `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` | non définis → rapports non versés | Où verser les rapports de recherche dans la base de connaissances |
+| `RESEARCH_GATEWAY_URL` | non défini → pas de vue de marché partagée | Gateway de l'agent, pour acheter la vue de marché une fois par jour |
+| `BIGDATA_DAILY_CALLS`, `RESEARCH_USAGE_FILE` | `9`, fichier à côté de `DATA_FILE` | Budget quotidien Bigdata.com et fichier qui le compte |
 | `REPORTS_BUCKET` | non défini → fichier JSON | Stockage des rapports sur S3 |
-| `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL` | non définis → alertes désactivées | Expéditeur SES vérifié, et liens dans les courriels |
-| `REFRESH_ENABLED`, `NEWS_ENABLED` | activés (mise à jour désactivée en dev par Terraform) | Désactive le job de mise à jour ou celui des news |
+| `ALERTS_SENDER`, `SES_CONFIGURATION_SET` | non définis → alertes désactivées | Expéditeur SES vérifié. Seul `ALERTS_SENDER` active les alertes |
+| `APP_URL` | non défini → liens relatifs | Adresse de l'app dans les courriels (sans elle, les liens ne marchent pas) |
+| `REFRESH_ENABLED`, `NEWS_ENABLED` | activés (Terraform ne pose que `REFRESH_ENABLED`, désactivé en dev) | Désactive le job de mise à jour ou celui des news |
 
 Les principales variables Terraform (par environnement, sinon des valeurs par défaut
 adaptées à la prod ou au dev) sont :
 - `allowed_cidrs`, par défaut `132.207.0.0/16` (Polytechnique) ;
 - `alerts_enabled` et `alerts_sender_email` ;
-- `refresh_enabled`, `schedule_enabled` et `job_timeout_seconds` ;
+- `refresh_enabled`, `schedule_enabled`, `reports_schedule_enabled` et `job_timeout_seconds` ;
 - `confirm_prod`, obligatoire pour toucher à la prod.
 
 Toutes les variables sont décrites dans le fichier `variables.tf` de chaque stack.
@@ -251,7 +261,7 @@ Les ressources des agents se créent à part, avec la CLI AWS (voir [Agents](#ag
 
 | Changement | Commande |
 | --- | --- |
-| Code de l'app (`app/`) | `./scripts/deploy-app.sh` (l'instance n'est pas recréée) |
+| Code de l'app (`app/`) | `./scripts/deploy-app.sh` (l'instance n'est pas recréée), et `bash scripts/deploy-batch.sh` si le changement touche les rapports programmés (l'image des jobs contient `app/`) |
 | Code des jobs (`src/`) | `bash scripts/deploy-batch.sh` |
 | Nouvelle migration | `python db/migrate.py info`, puis `python db/migrate.py` |
 | Infrastructure | `terraform -chdir=<stack> plan`, puis `apply` |
