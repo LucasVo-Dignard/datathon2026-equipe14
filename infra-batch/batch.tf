@@ -39,7 +39,7 @@ resource "aws_batch_job_definition" "daily_refresh" {
   }
 
   timeout {
-    attempt_duration_seconds = var.job_timeout_seconds
+    attempt_duration_seconds = local.job_timeout
   }
 
   container_properties = jsonencode({
@@ -69,7 +69,7 @@ resource "aws_batch_job_definition" "daily_refresh" {
       { name = "DB_NAME", value = data.aws_db_instance.main.db_name },
       { name = "DB_SECRET_ARN", value = local.db_secret_arn },
       { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
-      { name = "REFRESH_ENABLED", value = tostring(var.refresh_enabled) },
+      { name = "REFRESH_ENABLED", value = tostring(local.refresh_enabled) },
       # Price-move alerts by email (SES) after the refresh (price-alerts.js).
       # An empty ALERTS_SENDER turns them off.
       { name = "ALERTS_SENDER", value = local.alerts_sender },

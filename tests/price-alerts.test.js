@@ -170,7 +170,7 @@ test('dry run sends and records nothing; daily refresh calls the alerts', needsD
   const { main } = require('../src/marketdata/jobs/daily-refresh');
   const seen = [];
   const original = alertsJob.sendPriceAlerts;
-  alertsJob.sendPriceAlerts = (conn, opts) => original(conn, { ...opts, ses });
+  alertsJob.sendPriceAlerts = (conn, opts) => { seen.push('<alert>'); return original(conn, { ...opts, ses }); };
   try {
     const code = await main([], {
       env: { DATABASE_URL: process.env.TEST_DATABASE_URL, ALERTS_SENDER: 'alertes@example.com' },
@@ -183,4 +183,9 @@ test('dry run sends and records nothing; daily refresh calls the alerts', needsD
   }
   assert.ok(seen.includes('PABIG'), 'subscriber holding refreshed');
   assert.deepEqual(ses.sent.map((m) => m.Destination.ToAddresses[0]), ['pa-dry@example.com'], 'alert sent after the refresh');
+  // Order: subscribers' holdings, then the alert, then the other tracked symbols.
+  const iAlert = seen.indexOf('<alert>');
+  assert.ok(iAlert > seen.indexOf('PABIG'), 'holdings refreshed before the alert');
+  assert.ok(seen.slice(iAlert + 1).length > 0, 'other tracked symbols refreshed after the alert');
+  assert.ok(!seen.slice(iAlert + 1).includes('PABIG'), 'holdings not refreshed twice');
 }));
