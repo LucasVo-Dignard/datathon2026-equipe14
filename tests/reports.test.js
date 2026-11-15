@@ -2,7 +2,7 @@
 // Report data sheet (no agent call).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildBrief, periodStart, exposures, issuerCountry, PERIODS } = require('../app/reports');
+const { buildBrief, periodStart, periodFrom, analyze, highlights, exposures, issuerCountry, PERIODS } = require('../app/reports');
 
 const HISTORY = [
   { date: '2025-11-14', value: 900 },
@@ -66,7 +66,7 @@ test('brief has percentages and dates, never amounts', () => {
   const weekly = buildBrief({ period: 'weekly', portfolio: PORTFOLIO, profile: null, now: NOW });
   assert.match(weekly, /rapport hebdomadaire/);
   assert.match(weekly, /du 6 novembre 2026 au 14 novembre 2026 : \+2,04 %/); // 980 -> 1000
-  assert.match(weekly, /RY\.TO ; Royal Bank ; Finance ; Canada ; CAD ; 50,0 % ; \+12,50 %/);
+  assert.match(weekly, /RY\.TO ; Royal Bank ; Finance ; Canada ; CAD ; 50,0 % ; variation indisponible ; \+12,50 %/);
   assert.match(weekly, /AAPL ; Apple ; Technologie ; États-Unis ; USD/);
   assert.match(weekly, /Liquidités : 10,0 %/);
   assert.match(weekly, /EXPOSITION PAR RÉGION[^\n]*\n- Amérique du Nord : 90,0 %\n- Europe : 10,0 %/);
@@ -82,6 +82,30 @@ test('brief has percentages and dates, never amounts', () => {
   const yearly = buildBrief({ period: 'yearly', portfolio: PORTFOLIO, profile: null, now: NOW });
   assert.match(yearly, /\+11,11 %/); // 900 -> 1000
   assert.match(yearly, /Ancien/);
+});
+
+test('period reports use each stock\'s move over the period, never the last session', () => {
+  assert.equal(periodFrom(PORTFOLIO, 'daily'), null);
+  assert.equal(periodFrom(PORTFOLIO, 'monthly'), '2026-10-15');
+  const changes = { 'RY.TO': { change: 0.04 }, AAPL: { change: -0.1 }, ASML: null };
+  const monthly = buildBrief({ period: 'monthly', portfolio: PORTFOLIO, profile: null, changes, now: NOW });
+  assert.doesNotMatch(monthly, /Dernière séance :|\+1,01 %|-2,00 %/); // summary and holdings day changes
+  assert.match(monthly, /variation du cours sur la période/);
+  assert.match(monthly, /RY\.TO ; Royal Bank ; Finance ; Canada ; CAD ; 50,0 % ; \+4,00 % ; \+12,50 %/);
+  assert.match(monthly, /ASML ; ASML ; Technologie ; Pays-Bas ; USD ; 10,0 % ; variation indisponible/);
+  assert.match(monthly, /CONTRIBUTIONS[^\n]*\n- RY\.TO : \+2,00 %\n- AAPL : -4,00 %/); // 50 % × 4 %, 40 % × -10 %
+
+  const daily = buildBrief({ period: 'daily', portfolio: PORTFOLIO, profile: null, now: NOW });
+  assert.match(daily, /Dernière séance, du 13 novembre 2026 au 14 novembre 2026 : \+1,01 %/);
+  assert.match(daily, /RY\.TO ; [^\n]* ; \+1,00 % ; \+12,50 %/);
+
+  const tiles = highlights(analyze({ period: 'monthly', portfolio: PORTFOLIO, changes }));
+  assert.deepEqual(tiles.map((t) => [t.label, t.value, t.detail]), [
+    ['Rendement mensuel', '+5,26 %', 'du 14 octobre 2026 au 14 novembre 2026'], // 950 -> 1000
+    ['Meilleur titre', '+4,00 %', 'RY.TO'],
+    ['Plus faible', '-10,00 %', 'AAPL'],
+    ['Région principale', '90,0 %', 'Amérique du Nord'],
+  ]);
 });
 
 test('every period has a label and title', () => {

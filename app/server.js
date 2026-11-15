@@ -269,7 +269,19 @@ async function handleApi(req, res, pathname) {
         console.error('profile load error:', err.message);
         return null;
       });
-      const brief = reports.buildBrief({ period, portfolio, profile: investorProfile });
+      // Period reports: each stock's own move since the start of the period.
+      const from = reports.periodFrom(portfolio, period);
+      const changes = {};
+      if (from) {
+        await Promise.all(portfolio.holdings.filter((h) => h.available).map(async (h) => {
+          changes[h.symbol] = await stocks.changeSince(h.symbol, from).catch((err) => {
+            console.error(`report change error (${h.symbol}):`, err.message);
+            return null;
+          });
+        }));
+      }
+      const brief = reports.buildBrief({ period, portfolio, profile: investorProfile, changes });
+      const highlights = reports.highlights(reports.analyze({ period, portfolio, changes }));
       let content;
       try {
         content = await report({ label: reports.PERIODS[period].label, brief });
@@ -284,6 +296,7 @@ async function handleApi(req, res, pathname) {
         title: reports.PERIODS[period].title,
         asOf: portfolio.asOf,
         createdAt: Date.now(),
+        highlights,
         content: String(content),
       };
       return sendJson(res, 201, await reportStore.save(entry));

@@ -157,6 +157,14 @@ async function saveMacroObservations(db, observations) {
 // Latest profile and the last two daily closes of a symbol, from any
 // provider, or null if no price is cached. `fetchedAt` is when the latest bar
 // was fetched, to decide whether the data is stale.
+// Last close on or before `date` (ISO), or null.
+async function closeOnOrBefore(db, symbol, date) {
+  const { rows: [bar] } = await db.query(
+    `SELECT to_char(date, 'YYYY-MM-DD') AS date, close::float8 AS close FROM price_bars
+      WHERE symbol = $1 AND date <= $2 ORDER BY date DESC, fetched_at DESC LIMIT 1`, [symbol, date]);
+  return bar || null;
+}
+
 async function latestQuote(db, symbol) {
   const { rows: [profile] } = await db.query(
     `SELECT name, exchange, currency, country, sector FROM company_profiles
@@ -220,4 +228,5 @@ module.exports = {
   saveMacroObservations,
   macroObservations,
   latestQuote,
+  closeOnOrBefore,
 };

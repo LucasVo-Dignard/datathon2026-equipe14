@@ -43,6 +43,27 @@ function shuffled(items) {
   return a;
 }
 
+// A start close more than this before the requested date is a data gap, not a start.
+const MAX_START_GAP_DAYS = 10;
+
+const daysBetween = (a, b) => (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400e3;
+
+// { from, to, change } between the last close on or before `fromDate` and the
+// latest close, in the stock's own currency; null without a usable start.
+function toChange(start, end, fromDate) {
+  if (!start || !end || !(start.close > 0) || end.date <= start.date) return null;
+  if (daysBetween(start.date, fromDate) > MAX_START_GAP_DAYS) return null;
+  return { from: start.date, to: end.date, change: end.close / start.close - 1 };
+}
+
+// Same from Yahoo, nothing saved.
+async function yahooChange(history, symbol, fromDate) {
+  const range = new DateRange(DateRange.lastDays(MAX_START_GAP_DAYS + 1, fromDate).start, DateRange.lastDays(1).end);
+  const bars = (await history.fetch(symbol, range)).filter((b) => b.close > 0);
+  const start = bars.filter((b) => b.date <= fromDate).at(-1);
+  return toChange(start, bars.at(-1), fromDate);
+}
+
 function toQuote({ symbol, name, exchange, currency, country, sector, price, prevClose, asOf, provider }) {
   const change = prevClose == null ? null : price - prevClose;
   return {
@@ -111,7 +132,18 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     return rows.length ? rows.map((r) => r.symbol) : shuffled(FALLBACK_SYMBOLS).slice(0, count);
   }
 
-  return { lookup, randomSymbols, close: () => pool.end() };
+  // Price change since `fromDate` (ISO): from the stored bars, or from Yahoo
+  // when they don't go back that far (symbols loaded with a short history).
+  const history = new marketdata.yahoo.YahooPriceHistoryFetcher(yahooClient);
+  async function changeSince(symbol, fromDate) {
+    const [start, end] = await Promise.all([
+      repo.closeOnOrBefore(pool, symbol, fromDate),
+      repo.closeOnOrBefore(pool, symbol, '9999-12-31'),
+    ]);
+    return toChange(start, end, fromDate) || yahooChange(history, symbol, fromDate);
+  }
+
+  return { lookup, randomSymbols, changeSince, close: () => pool.end() };
 }
 
 function createLiveLookup({ yahooClient }) {
@@ -146,6 +178,7 @@ function createLiveLookup({ yahooClient }) {
   return {
     lookup,
     randomSymbols: async (count) => shuffled(FALLBACK_SYMBOLS).slice(0, count),
+    changeSince: (symbol, fromDate) => yahooChange(history, symbol, fromDate),
     close: async () => {},
   };
 }

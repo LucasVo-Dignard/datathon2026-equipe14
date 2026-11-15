@@ -34,8 +34,23 @@
     return body;
   }
 
+  // Key figures computed by the server (reports.highlights), above the text.
+  function tiles(highlights) {
+    const row = el('div', { class: 'report-tiles' });
+    for (const t of highlights || []) {
+      const tile = el('div', { class: 'report-tile' });
+      tile.append(
+        el('span', { class: 'label' }, t.label),
+        el('span', { class: `report-tile-value delta ${t.tone}` }, t.value),
+        el('span', { class: 'muted small' }, t.detail),
+      );
+      row.append(tile);
+    }
+    return row;
+  }
+
   function card(report) {
-    const section = el('section', { class: 'card', 'data-id': report.id });
+    const section = el('section', { class: `card report report-${report.period}`, 'data-id': report.id });
     const head = el('div', { class: 'card-head' });
     const titles = el('div');
     titles.append(
@@ -54,7 +69,9 @@
       }
     };
     head.append(titles, del);
-    section.append(head, reportText(report.content));
+    section.append(head);
+    if (report.highlights?.length) section.append(tiles(report.highlights));
+    section.append(reportText(report.content));
     return section;
   }
 
