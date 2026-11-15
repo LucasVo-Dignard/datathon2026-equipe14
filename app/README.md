@@ -6,11 +6,15 @@ Postgres when `DATABASE_URL` is set; users and login sessions (and everything,
 without a database) are in a JSON file.
 
 - `server.js`: API (`/api/login`, `/api/chats`, ...) and static files
-- `bot.js`: **the agent**. Basic version: Claude Opus 5.5 on Amazon Bedrock
-  (`@anthropic-ai/bedrock-sdk`), no tools or search, replies from the
-  conversation history and the user's investor `profile` (summary added to the
-  system prompt). Refusals fall back to Claude Opus 4.8.
-  `AGENT_MODEL` / `AGENT_EFFORT` env vars override the model and effort.
+- `bot.js`: **the agent**. Claude Opus 5.5 on Amazon Bedrock
+  (`@anthropic-ai/bedrock-sdk`) writes the answers in Markdown from the
+  conversation and the user's investor `profile`. For questions about a
+  company it calls the `research_company` tool: `research.js` invokes the
+  AgentCore research harness (earnings releases knowledge base, then web
+  search), see `../agents/README.md`. Refusals fall back to Claude Opus 4.8.
+  `AGENT_MODEL` / `AGENT_EFFORT` override the model and effort,
+  `RESEARCH_HARNESS_ARN` enables the research.
+- `public/markdown.js`: safe Markdown renderer for the answers (DOM nodes only, no HTML).
 - `chat-store.js`: conversation history (see [Conversations](#conversations)).
 - `profile.js`: investor profile. Guided questionnaire, risk scoring, matching with the
   case personas (Amira, Mateo, Robert), tensions and guardrails for the agents.

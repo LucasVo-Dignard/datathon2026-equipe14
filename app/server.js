@@ -280,6 +280,7 @@ async function handleApi(req, res, pathname) {
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/markdown.js': ['markdown.js', 'text/javascript; charset=utf-8'],
   '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
