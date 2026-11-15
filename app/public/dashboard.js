@@ -260,7 +260,6 @@
       $('perf-summary').replaceChildren();
       box.setAttribute('aria-label', 'Aucune donnée de performance');
       box.replaceChildren(el('p', { class: 'muted small' }, 'Ajoutez des titres pour voir la performance du portefeuille.'));
-      $('history-table').tBodies[0].replaceChildren();
       return;
     }
     const pts = (chart.points = periodPoints());
@@ -342,7 +341,6 @@
     chart.tip = tip;
     box.replaceChildren(root, tip);
 
-    renderHistoryTable(pts);
     if (chart.hover !== null) showHover(Math.min(chart.hover, pts.length - 1));
   }
 
@@ -391,15 +389,6 @@
     const rect = $('chart').getBoundingClientRect();
     const t = (clientX - rect.left - m.left) / iw;
     return Math.max(0, Math.min(chart.points.length - 1, Math.round(t * (chart.points.length - 1))));
-  }
-
-  function renderHistoryTable(pts) {
-    const rows = [...pts].reverse().map((p) => {
-      const tr = el('tr');
-      tr.append(el('td', {}, fullDate.format(parseDate(p.date))), el('td', { class: 'num' }, money.format(p.value)));
-      return tr;
-    });
-    $('history-table').tBodies[0].replaceChildren(...rows);
   }
 
   function setupChart() {

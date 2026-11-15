@@ -1,10 +1,6 @@
 'use strict';
-// JSON backend always runs. Postgres backend runs only if TEST_DATABASE_URL is set,
-// e.g. TEST_DATABASE_URL=postgres://localhost:5433/test npm test
-// WARNING: it drops and recreates the investor_profiles table in that database,
-// applying db/migrations/V4__create_investor_profiles.sql (what Flyway runs).
-const fs = require('node:fs');
-const path = require('node:path');
+// JSON backend always runs. Postgres tests need TEST_DATABASE_URL on a THROWAWAY
+// database with all db/migrations applied (they create and delete the ps-* users).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createProfileStore } = require('../app/profile-store');
@@ -15,24 +11,26 @@ const sample = (id) => {
   return { answers, result: buildProfile(answers), updatedAt: Date.now() };
 };
 
-async function exerciseStore(store) {
+async function exerciseStore(store, prefix = '') {
+  const alice = `${prefix}alice`;
+  const bob = `${prefix}bob`;
   await store.init();
-  assert.equal(await store.get('nobody'), null);
+  assert.equal(await store.get(`${prefix}nobody`), null);
 
-  const saved = await store.save('alice', sample('robert'));
+  const saved = await store.save(alice, sample('robert'));
   assert.equal(saved.result.level.id, 'faible-modere');
   assert.equal(typeof saved.updatedAt, 'number');
 
   // Upsert: second save replaces the first.
-  await store.save('alice', sample('amira'));
-  const got = await store.get('alice');
+  await store.save(alice, sample('amira'));
+  const got = await store.get(alice);
   assert.equal(got.result.level.id, 'eleve');
   assert.deepEqual(got.answers, sample('amira').answers);
 
   // Profiles are per user.
-  await store.save('bob', sample('mateo'));
-  assert.equal((await store.get('bob')).result.level.id, 'modere');
-  assert.equal((await store.get('alice')).result.level.id, 'eleve');
+  await store.save(bob, sample('mateo'));
+  assert.equal((await store.get(bob)).result.level.id, 'modere');
+  assert.equal((await store.get(alice)).result.level.id, 'eleve');
 }
 
 test('JSON store', async () => {
@@ -51,18 +49,20 @@ test('Postgres store', { skip: !process.env.TEST_DATABASE_URL && 'TEST_DATABASE_
   const { Client } = require('pg');
   const admin = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   await admin.connect();
-  await admin.query('DROP TABLE IF EXISTS investor_profiles');
+  // Deleting the users cascades to their profiles (V12).
+  const clean = () => admin.query("DELETE FROM users WHERE username LIKE 'ps-%'");
+  await clean();
   try {
-    await assert.rejects(store.init(), /migrations Flyway/, 'init() reports a missing migration');
-    await admin.query(fs.readFileSync(
-      path.join(__dirname, '..', 'db', 'migrations', 'V4__create_investor_profiles.sql'), 'utf8'));
-    await exerciseStore(store);
-    const { rows } = await admin.query('SELECT username, risk_level, score FROM investor_profiles ORDER BY username');
-    assert.deepEqual(rows.map((r) => [r.username, r.risk_level]), [['alice', 'eleve'], ['bob', 'modere']]);
+    await admin.query("INSERT INTO users (username) VALUES ('ps-alice'), ('ps-bob'), ('ps-x')");
+    await exerciseStore(store, 'ps-');
+    const { rows } = await admin.query(
+      "SELECT username, risk_level FROM investor_profiles WHERE username LIKE 'ps-%' ORDER BY username");
+    assert.deepEqual(rows.map((r) => [r.username, r.risk_level]), [['ps-alice', 'eleve'], ['ps-bob', 'modere']]);
     await assert.rejects(admin.query(
-      "INSERT INTO investor_profiles (username, answers, result, risk_level, score) VALUES ('x', '{}', '{}', 'eleve', 150)"),
+      "INSERT INTO investor_profiles (username, answers, result, risk_level, score) VALUES ('ps-x', '{}', '{}', 'eleve', 150)"),
     /check constraint/);
   } finally {
+    await clean();
     await admin.end();
     await store.close();
   }
