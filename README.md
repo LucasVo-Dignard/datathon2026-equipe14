@@ -20,8 +20,8 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 - [Sources de données](#sources-de-données)
 - [Configuration](#configuration)
 - [Démarrage et reproduction](#démarrage-et-reproduction)
+- [Coûts et arrêt](#coûts-et-arrêt)
 - [Sécurité](#sécurité)
-- [Documentation détaillée](#documentation-détaillée)
 
 ## Fonctionnalités
 
@@ -63,10 +63,36 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | **Amazon SES** | Alertes de prix par courriel |
 | **S3** | État Terraform, rapports, paquets de migration. Tous privés |
 
-L'infrastructure est décrite en Terraform, dans trois stacks : `infra/` (réseau, EC2, ECR,
-SES, S3), `infra-db/` (RDS) et `infra-batch/` (jobs). Il existe **un environnement
-par développeur** (`lucas`, `andre`, `youcef`) en plus de la prod : voir
-[ENVIRONMENTS.md](ENVIRONMENTS.md).
+L'infrastructure est décrite en Terraform, dans trois stacks à appliquer dans cet
+ordre : `infra/` (réseau, EC2, ECR, SES, S3), `infra-db/` (RDS) et `infra-batch/`
+(jobs). Chaque stack garde son état dans un bucket S3 privé, avec un verrou.
+
+**Un environnement par développeur, en plus de la prod**, dans le même compte AWS.
+Chacun a ses propres VPC, EC2, RDS, jobs et dépôts ECR :
+
+| Environnement | Workspace Terraform | Noms des ressources |
+| --- | --- | --- |
+| prod | `default` | `datathon2026-equipe14-*` |
+| Lucas, André, Youcef | `lucas`, `andre`, `youcef` | `datathon2026-equipe14-<nom>-*` |
+
+Le workspace est choisi par la variable `TF_WORKSPACE`, que lisent Terraform,
+`db/migrate.py` et les scripts de déploiement. Sans elle, rien ne touche la prod :
+Terraform exige `-var confirm_prod=true`, et les scripts refusent de tourner. En dev,
+la planification des jobs est désactivée et l'IP de la machine qui fait `apply` est
+autorisée en plus de Polytechnique.
+
+**Agent de recherche (Bedrock AgentCore).** Quand une question porte sur une société,
+Claude appelle un *harness* AgentCore. Celui-ci interroge, dans l'ordre :
+1. la base de connaissances (communiqués de résultats, filtrés par titre) ;
+2. Bigdata.com, au plus 2 appels par recherche ;
+3. la recherche web d'AgentCore, en dernier recours.
+
+Il renvoie un rapport sourcé. Les questions de jugement (acheter, vendre, est-ce
+risqué…) passent ensuite par un second harness, le **relecteur**. Celui-ci évalue la
+qualité, la fraîcheur et l'équilibre des sources, et rend un verdict (`SOLID`,
+`PARTIAL`, `WEAK`) avec des points de vigilance. Chaque rapport qui a utilisé
+Bigdata.com est versé dans la base de connaissances, pour que la même question soit
+gratuite la fois suivante.
 
 ## Dépendances
 
@@ -110,15 +136,32 @@ données de départ du cas n'est pas utilisé. Chaque valeur garde sa source et 
 | **companiesmarketcap.com** | Classement mondial des capitalisations (≈ 1 000 sociétés suivies) | CSV public | `src/marketdata/providers/companiesmarketcap/` |
 | **CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch** | Titres, extraits de 400 caractères au plus, liens, dans leur langue d'origine | Flux RSS publics. On ne garde que le titre, l'extrait et le lien vers l'éditeur | `src/marketdata/news/feeds.js` |
 | **SEC EDGAR** | Communiqués de résultats (8-K, pièce 99.1), versés dans la base de connaissances de l'agent | Public | `agents/knowledge-base/` |
-| **Bigdata.com** | Données financières premium pour l'agent de recherche | Clé dans Secrets Manager, crédits limités (≈ 9 appels/jour) | `app/research.js`, `agents/README.md` |
-| **Recherche web AgentCore** | Dernier recours de l'agent de recherche | Via AgentCore Gateway | `agents/README.md` |
+| **Bigdata.com** | Données financières premium pour l'agent de recherche | Clé dans Secrets Manager, crédits limités (≈ 9 appels/jour, partagés par l'équipe) | `app/research.js` |
+| **Recherche web AgentCore** | Dernier recours de l'agent de recherche | Via AgentCore Gateway | `app/research.js` |
 
-Les conditions d'utilisation de chaque flux et le détail des traitements sont
-décrits dans [src/marketdata/README.md](src/marketdata/README.md). Quelques
-limites à garder en tête :
-- les cours passés ne présagent pas des cours futurs ;
-- Yahoo couvre mal les titres de la TSX en news, ce que les médias canadiens compensent ;
-- le ton détecté par Comprehend est un indice, pas un avis.
+**Conditions des flux RSS.** Ils sont offerts pour l'usage personnel et pour les
+agrégateurs qui affichent le titre et un court extrait, avec un lien vers l'article
+et le nom de la source. C'est tout ce que l'outil garde et affiche, sans texte
+intégral, et les articles de plus de 30 jours sont supprimés. Conditions :
+[CBC](https://www.cbc.ca/rss/), [Radio-Canada](https://ici.radio-canada.ca/rss),
+[The Globe and Mail](https://www.theglobeandmail.com/about/rss/),
+[MarketWatch](https://www.marketwatch.com/site/rss).
+
+**Traitements.**
+- Les cours sont des clôtures ajustées (dividendes, fractionnements), convertis en
+  CAD avec les taux Yahoo.
+- Chaque nouvel article passe une fois par Amazon Comprehend, qui détecte le ton et
+  les sociétés nommées. Celles-ci sont rattachées aux sociétés cotées en base, sans
+  tenir compte des formes juridiques ni des accents, avec les sigles canadiens
+  (RBC, TD, BMO…). Le rattachement est prudent : « Bank of Canada » n'est jamais
+  confondue avec la Banque Royale.
+- L'actualité générale n'est affichée que si elle nomme une société cotée ou
+  traite d'un thème de marché.
+
+**Limites.**
+- Les cours passés ne présagent pas des cours futurs.
+- Yahoo couvre mal les titres de la TSX en news, ce que les médias canadiens compensent.
+- Le ton détecté par Comprehend est un indice, pas un avis.
 
 ## Configuration
 
@@ -146,7 +189,7 @@ toutes optionnelles.
 | `DATA_FILE` | `app/data/db.json` | Fichier JSON du mode sans base |
 | `AWS_REGION` | `us-east-1` | Région des SDK AWS |
 | `AGENT_MODEL`, `AGENT_EFFORT` | `anthropic.claude-opus-5-5`, `low` | Modèle et effort de l'agent conversationnel |
-| `RESEARCH_HARNESS_ARN`, `RESEARCH_REVIEWER_ARN`, `RESEARCH_KB_*`, `BIGDATA_DAILY_CALLS` | non définis → recherche désactivée | Agent de recherche AgentCore (voir `agents/README.md`) |
+| `RESEARCH_HARNESS_ARN`, `RESEARCH_REVIEWER_ARN`, `RESEARCH_KB_*`, `BIGDATA_DAILY_CALLS` | non définis → recherche désactivée | Agent de recherche AgentCore (ressources ci-dessous) |
 | `REPORTS_BUCKET` | non défini → fichier JSON | Stockage des rapports sur S3 |
 | `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL` | non définis → alertes désactivées | Expéditeur SES vérifié, et liens dans les courriels |
 | `FINNHUB_API_KEY` | non défini → étapes Finnhub ignorées | Données Finnhub dans les jobs |
@@ -159,7 +202,7 @@ adaptées à la prod ou au dev) sont :
 - `refresh_enabled`, `schedule_enabled` et `job_timeout_seconds` ;
 - `confirm_prod`, obligatoire pour toucher à la prod.
 
-Voir les `variables.tf` et les README des stacks.
+Toutes les variables sont décrites dans le fichier `variables.tf` de chaque stack.
 
 ## Démarrage et reproduction
 
@@ -202,7 +245,7 @@ TEST_DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm t
 ### 4. Créer un environnement AWS complet (reproduction)
 
 Prérequis : `.env-aws` et `.env-dev` chargés, Docker et Python avec `boto3`.
-L'ordre est important : voir [ENVIRONMENTS.md](ENVIRONMENTS.md).
+L'ordre est important : chaque stack lit les ressources de la précédente.
 
 ```bash
 terraform -chdir=infra init && terraform -chdir=infra apply         # réseau, EC2, ECR, SES
@@ -216,8 +259,19 @@ terraform -chdir=infra output url                                   # URL de l'a
 
 Après le premier `apply` d'`infra`, SES envoie un lien de vérification à l'adresse
 expéditrice de l'environnement (`datathon2026.equipe14+<env>@gmail.com`). Il faut
-cliquer dessus une fois pour que les alertes partent. L'agent de recherche
-(AgentCore) a été créé à la main, avec la CLI AWS : voir `agents/README.md`.
+cliquer dessus une fois pour que les alertes partent.
+
+**L'agent de recherche n'est pas encore dans Terraform.** Ses ressources ont été
+créées à la main avec la CLI AWS, dans l'environnement `andre` et en prod :
+- un bucket S3 privé et une base de connaissances Bedrock, avec sa source de données ;
+- une AgentCore Gateway (authentification IAM), avec trois cibles : la base de
+  connaissances, la recherche web, et Bigdata.com en MCP, limitée à 6 requêtes par
+  minute, avec une clé lue dans Secrets Manager par AgentCore Identity ;
+- deux harnesses, `research` et `reviewer` ;
+- leurs rôles IAM.
+
+L'app les trouve par les variables `RESEARCH_*`. Sur l'EC2, ces variables sont dans
+`/etc/chatbot.env`, posées par SSM : il faut les remettre si l'instance est remplacée.
 
 ### 5. Mettre à jour un environnement
 
@@ -231,9 +285,22 @@ cliquer dessus une fois pour que les alertes partent. L'agent de recherche
 Prod : `TF_WORKSPACE=default`, avec `-var confirm_prod=true` pour Terraform et
 `--env prod` pour `migrate.py`. On n'y touche que sur demande, et toujours depuis `main`.
 
+## Coûts et arrêt
+
+Laissé allumé, un environnement coûte environ **37 $ par mois** : environ 26 $ pour
+RDS, 7,50 $ pour l'EC2 et 3,60 $ pour l'Elastic IP. S'y ajoutent quelques cents par
+jour pour Comprehend, SES et Fargate, plus Bedrock à l'usage. Pour arrêter ce qui
+ne sert pas :
+
+| Quoi | Commande |
+| --- | --- |
+| EC2 | `terraform -chdir=infra apply -var instance_running=false` (l'Elastic IP reste facturée) |
+| RDS | `aws rds stop-db-instance --db-instance-identifier datathon2026-equipe14-<nom>-db` (AWS la redémarre après 7 jours) |
+| Tout | `terraform destroy` dans `infra-batch`, puis `infra-db`, puis `infra` |
+
 ## Sécurité
 
-Ce sont les règles des organisateurs, reprises dans [CLAUDE.md](CLAUDE.md) :
+Les règles des organisateurs sont obligatoires. Voici comment le projet les respecte :
 - **aucun groupe de sécurité ouvert à Internet** : le port 80 n'est ouvert qu'à
   Polytechnique et aux adresses IP déclarées. Aucune entrée sur RDS ni sur Batch ;
 - **RDS non publique**, accessible seulement depuis le serveur web et le job, en
@@ -243,19 +310,6 @@ Ce sont les règles des organisateurs, reprises dans [CLAUDE.md](CLAUDE.md) :
 - **aucun identifiant dans Git** : mots de passe dans Secrets Manager, déploiements
   par SSM, sans SSH ;
 - **ressources minimales** : `t3.micro`, `db.t4g.small`, Fargate 0,25 vCPU, pas de
-  NAT. Voir les coûts et l'arrêt dans [ENVIRONMENTS.md](ENVIRONMENTS.md) ;
+  NAT, et arrêt de ce qui ne sert pas (voir [Coûts et arrêt](#coûts-et-arrêt)) ;
 - **les données des sources sont traitées comme non fiables** : flux RSS bornés en
   taille et en temps, HTML retiré, liens `http(s)` seulement, affichage par `textContent`.
-
-## Documentation détaillée
-
-| Sujet | Fichier |
-| --- | --- |
-| Environnements, coûts, prod | [ENVIRONMENTS.md](ENVIRONMENTS.md) |
-| App : profil, portefeuille, conversations, alertes | [app/README.md](app/README.md) |
-| Agent de recherche (AgentCore, Bigdata.com, relecture) | [agents/README.md](agents/README.md) |
-| Paquet `marketdata` : sources, news, macro, top 1 000 | [src/marketdata/README.md](src/marketdata/README.md) |
-| Base de données et migrations Flyway | [db/README.md](db/README.md) |
-| Infra web : EC2, ECR, SES, déploiement | [infra/README.md](infra/README.md) |
-| Base RDS | [infra-db/README.md](infra-db/README.md) |
-| Jobs Batch et planifications | [infra-batch/README.md](infra-batch/README.md) |
