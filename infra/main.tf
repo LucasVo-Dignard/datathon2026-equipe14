@@ -182,6 +182,9 @@ resource "aws_instance" "web" {
 
   metadata_options {
     http_tokens = "required" # IMDSv2 only
+    # 2 hops so the app container (Docker adds one) can get the instance role's
+    # credentials, e.g. to call Bedrock.
+    http_put_response_hop_limit = 2
   }
 
   root_block_device {
