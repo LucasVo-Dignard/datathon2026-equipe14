@@ -16,6 +16,7 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 
 - [Fonctionnalités](#fonctionnalités)
 - [Architecture et services AWS](#architecture-et-services-aws)
+- [Agents](#agents)
 - [Dépendances](#dépendances)
 - [Sources de données](#sources-de-données)
 - [Configuration](#configuration)
@@ -48,38 +49,48 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 
 L'infrastructure est décrite en Terraform, dans trois stacks à appliquer dans cet
 ordre : `infra/` (réseau, EC2, ECR, SES, S3), `infra-db/` (RDS) et `infra-batch/`
-(jobs). Chaque stack garde son état dans un bucket S3 privé, avec un verrou.
+(jobs). Chaque stack garde son tfstate dans un bucket S3 privé, avec un verrou.
 
-**Un environnement par développeur, en plus de la prod**, dans le même compte AWS.
-Chacun a ses propres VPC, EC2, RDS, jobs et dépôts ECR :
+## Agents
 
-| Environnement | Workspace Terraform | Noms des ressources |
+Trois agents, tous avec Claude sur Amazon Bedrock :
+
+| Agent | Où | Rôle |
 | --- | --- | --- |
-| prod | `default` | `datathon2026-equipe14-*` |
-| Lucas, André, Youcef | `lucas`, `andre`, `youcef` | `datathon2026-equipe14-<nom>-*` |
+| **Assistant** | `app/bot.js` | Répond au client en Markdown. Il connaît son profil et son portefeuille, et a trois outils : `research_company` (lance l'agent de recherche), `find_similar_companies` (sociétés comparables, tirées de la base) et `get_portfolio_details`. Il rédige aussi les rapports. Un refus est relancé sur Claude Opus 4.8 |
+| **Recherche** | harness AgentCore, appelé par `app/research.js` | Cherche les faits sur une société et renvoie un rapport sourcé |
+| **Relecteur** | harness AgentCore | Pour les questions de jugement seulement (acheter, vendre, est-ce risqué…) : évalue la qualité, la fraîcheur et l'équilibre des sources, et rend un verdict (`SOLID`, `PARTIAL`, `WEAK`) avec des points de vigilance |
 
-Le workspace est choisi par la variable `TF_WORKSPACE`, que lisent Terraform,
-`db/migrate.py` et les scripts de déploiement. Sans elle, rien ne touche la prod :
-Terraform exige `-var confirm_prod=true`, et les scripts refusent de tourner. En dev,
-la planification des jobs est désactivée et l'IP de la machine qui fait `apply` est
-autorisée en plus de Polytechnique.
-
-**Agent de recherche (Bedrock AgentCore).** Quand une question porte sur une société,
-Claude appelle un *harness* AgentCore. Celui-ci interroge, dans l'ordre :
-1. la base de connaissances (communiqués de résultats, filtrés par titre) ;
-2. Bigdata.com, au plus 2 appels par recherche ;
+**Sources de l'agent de recherche**, derrière une AgentCore Gateway (authentification
+IAM), dans l'ordre :
+1. la base de connaissances Bedrock : communiqués de résultats (SEC EDGAR) et rapports
+   déjà produits, filtrés par titre ;
+2. **Bigdata.com** (données financières premium, en MCP), au plus 3 appels par
+   recherche ;
 3. la recherche web d'AgentCore, en dernier recours.
 
-Il renvoie un rapport sourcé. Les questions de jugement (acheter, vendre, est-ce
-risqué…) passent ensuite par un second harness, le **relecteur**. Celui-ci évalue la
-qualité, la fraîcheur et l'équilibre des sources, et rend un verdict (`SOLID`,
-`PARTIAL`, `WEAK`) avec des points de vigilance. Chaque rapport qui a utilisé
-Bigdata.com est versé dans la base de connaissances, pour que la même question soit
-gratuite la fois suivante.
+**Crédits Bigdata.com limités.**
+- Budget quotidien (`BIGDATA_DAILY_CALLS`, 9 appels par défaut) : une fois atteint,
+  la recherche continue sans Bigdata.com jusqu'au lendemain.
+- La vue de marché Bigdata.com (secteurs, indices, taux) est achetée une fois par jour
+  et partagée entre les recherches.
+- Chaque rapport qui a utilisé Bigdata.com est versé dans la base de connaissances,
+  pour que la même question soit gratuite la fois suivante.
+
+**Pas encore dans Terraform.** Les ressources des agents ont été créées à la main
+avec la CLI AWS, dans l'environnement `andre` et en prod :
+- un bucket S3 privé et une base de connaissances Bedrock, avec sa source de données ;
+- la Gateway, avec trois cibles : la base de connaissances, la recherche web, et
+  Bigdata.com, limitée à 6 requêtes par minute, avec une clé lue dans Secrets Manager
+  par AgentCore Identity ;
+- les deux harnesses, `research` et `reviewer` ;
+- leurs rôles IAM.
+
+L'app les trouve par les variables `RESEARCH_*`. Sur l'EC2, `scripts/deploy-app.sh`
+retrouve ces ressources par leur nom et écrit les variables dans `/etc/chatbot.env` à
+chaque déploiement. Sans elles, l'assistant répond sans recherche.
 
 ## Dépendances
-
-**Outils**
 
 | Outil | Version | Pour |
 | --- | --- | --- |
@@ -89,19 +100,6 @@ gratuite la fois suivante.
 | Terraform | ≥ 1.10 | Infrastructure (`infra*/`) |
 | AWS CLI | v2 | Déploiements, jobs Batch à la main |
 | Python | ≥ 3.11 avec `boto3` | `db/migrate.py` (migrations Flyway sur RDS) |
-
-**Paquets npm** (`package.json`)
-
-| Paquet | Usage |
-| --- | --- |
-| `pg` | PostgreSQL (app et jobs) |
-| `yahoo-finance2` | Cours, profils, indicateurs, compositions de FNB, news Yahoo |
-| `fast-xml-parser` | Lecture des flux RSS des médias |
-| `@anthropic-ai/bedrock-sdk` | Claude sur Bedrock (agent conversationnel) |
-| `@aws-sdk/client-bedrock-agent`, `@aws-sdk/client-bedrock-agentcore` | Base de connaissances et harness de recherche AgentCore |
-| `@aws-sdk/client-comprehend` | Ton et entités des news |
-| `@aws-sdk/client-sesv2` | Alertes par courriel |
-| `@aws-sdk/client-s3`, `@aws-sdk/client-secrets-manager` | Rapports sur S3, mot de passe de la base |
 
 L'interface (`app/public/`) n'utilise aucun framework ni aucune dépendance.
 
@@ -114,13 +112,13 @@ données de départ du cas n'est pas utilisé. Chaque valeur garde sa source et 
 | Source | Données | Accès | Où |
 | --- | --- | --- | --- |
 | **Yahoo Finance** (`yahoo-finance2`) | Cours quotidiens ajustés, profils, indicateurs, objectifs et notes d'analystes, compositions de FNB, taux de change (`USDCAD=X`), news par titre | Sans clé. Débit limité à 30 appels/min dans le job | `src/marketdata/providers/yahoo/` |
-| **Finnhub** | News, résultats, recommandations (optionnel) | Clé gratuite `FINNHUB_API_KEY` (non configurée par défaut) | `src/marketdata/providers/finnhub/` |
 | **Banque mondiale** | Indicateurs macroéconomiques annuels, avec leur provenance | API publique, sans clé | `src/marketdata/providers/worldbank/` |
 | **companiesmarketcap.com** | Classement mondial des capitalisations (≈ 1 000 sociétés suivies) | CSV public | `src/marketdata/providers/companiesmarketcap/` |
 | **CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch** | Titres, extraits de 400 caractères au plus, liens, dans leur langue d'origine | Flux RSS publics. On ne garde que le titre, l'extrait et le lien vers l'éditeur | `src/marketdata/news/feeds.js` |
 | **SEC EDGAR** | Communiqués de résultats (8-K, pièce 99.1), versés dans la base de connaissances de l'agent | Public | `agents/knowledge-base/` |
-| **Bigdata.com** | Données financières premium pour l'agent de recherche | Clé dans Secrets Manager, crédits limités (≈ 9 appels/jour, partagés par l'équipe) | `app/research.js` |
-| **Recherche web AgentCore** | Dernier recours de l'agent de recherche | Via AgentCore Gateway | `app/research.js` |
+
+Les sources de l'agent de recherche (Bigdata.com, recherche web) sont décrites dans
+[Agents](#agents).
 
 **Conditions des flux RSS.** Ils sont offerts pour l'usage personnel et pour les
 agrégateurs qui affichent le titre et un court extrait, avec un lien vers l'article
@@ -160,10 +158,15 @@ de même que `*.tfvars`, `*.tfstate` et `*.pem`.
 set -a; source .env-aws; source .env-dev; set +a
 ```
 
+**Environnements.** Chaque développeur a le sien (VPC, EC2, RDS, jobs), en plus de la
+prod, dans le même compte AWS. `TF_WORKSPACE` le choisit pour Terraform,
+`db/migrate.py` et les scripts. Sans elle, rien ne touche la prod : Terraform exige
+`-var confirm_prod=true` et les scripts refusent de tourner.
+
 **Variables de l'app et des jobs.** Sur AWS, elles sont toutes posées
 automatiquement : le serveur construit `DATABASE_URL` depuis RDS et Secrets Manager,
-et Terraform remplit `/etc/chatbot.env` et la définition du job. En local, elles sont
-toutes optionnelles.
+Terraform et `scripts/deploy-app.sh` remplissent `/etc/chatbot.env`, et Terraform la
+définition du job. En local, elles sont toutes optionnelles.
 
 | Variable | Défaut | Effet |
 | --- | --- | --- |
@@ -172,10 +175,9 @@ toutes optionnelles.
 | `DATA_FILE` | `app/data/db.json` | Fichier JSON du mode sans base |
 | `AWS_REGION` | `us-east-1` | Région des SDK AWS |
 | `AGENT_MODEL`, `AGENT_EFFORT` | `anthropic.claude-opus-5-5`, `low` | Modèle et effort de l'agent conversationnel |
-| `RESEARCH_HARNESS_ARN`, `RESEARCH_REVIEWER_ARN`, `RESEARCH_KB_*`, `BIGDATA_DAILY_CALLS` | non définis → recherche désactivée | Agent de recherche AgentCore (ressources ci-dessous) |
+| `RESEARCH_HARNESS_ARN`, `RESEARCH_REVIEWER_ARN`, `RESEARCH_KB_*`, `RESEARCH_GATEWAY_URL`, `BIGDATA_DAILY_CALLS` | non définis → recherche désactivée | Agent de recherche AgentCore (voir [Agents](#agents)) |
 | `REPORTS_BUCKET` | non défini → fichier JSON | Stockage des rapports sur S3 |
 | `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL` | non définis → alertes désactivées | Expéditeur SES vérifié, et liens dans les courriels |
-| `FINNHUB_API_KEY` | non défini → étapes Finnhub ignorées | Données Finnhub dans les jobs |
 | `REFRESH_ENABLED`, `NEWS_ENABLED` | activés (mise à jour désactivée en dev par Terraform) | Désactive le job de mise à jour ou celui des news |
 
 Les principales variables Terraform (par environnement, sinon des valeurs par défaut
@@ -218,7 +220,7 @@ npm start
 ### 3. Tests
 
 ```bash
-npm test                                       # environ 125 tests ; ceux qui demandent une base sont sautés
+npm test                                       # les tests qui demandent une base sont sautés
 TEST_DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm test
 ```
 
@@ -244,17 +246,7 @@ Après le premier `apply` d'`infra`, SES envoie un lien de vérification à l'ad
 expéditrice de l'environnement (`datathon2026.equipe14+<env>@gmail.com`). Il faut
 cliquer dessus une fois pour que les alertes partent.
 
-**L'agent de recherche n'est pas encore dans Terraform.** Ses ressources ont été
-créées à la main avec la CLI AWS, dans l'environnement `andre` et en prod :
-- un bucket S3 privé et une base de connaissances Bedrock, avec sa source de données ;
-- une AgentCore Gateway (authentification IAM), avec trois cibles : la base de
-  connaissances, la recherche web, et Bigdata.com en MCP, limitée à 6 requêtes par
-  minute, avec une clé lue dans Secrets Manager par AgentCore Identity ;
-- deux harnesses, `research` et `reviewer` ;
-- leurs rôles IAM.
-
-L'app les trouve par les variables `RESEARCH_*`. Sur l'EC2, ces variables sont dans
-`/etc/chatbot.env`, posées par SSM : il faut les remettre si l'instance est remplacée.
+Les ressources des agents se créent à part, avec la CLI AWS (voir [Agents](#agents)).
 
 ### 5. Mettre à jour un environnement
 
