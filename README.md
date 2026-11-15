@@ -256,8 +256,9 @@ terraform -chdir=infra output url                                   # URL de l'a
 ```
 
 Après le premier `apply` d'`infra`, SES envoie un lien de vérification à l'adresse
-expéditrice de l'environnement (`datathon2026.equipe14+<env>@gmail.com`). Il faut
-cliquer dessus une fois pour que les alertes partent.
+expéditrice des alertes : `alerts_sender_email` si elle est posée, sinon
+`datathon2026.equipe14+<env>@gmail.com`. Il faut cliquer dessus une fois pour que les
+alertes partent.
 
 Les agents (`infra-agents/`) se créent après, avec la clé Bigdata.com à verser dans
 Secrets Manager (voir [Agents](#agents)), puis un nouveau `./scripts/deploy-app.sh`.
