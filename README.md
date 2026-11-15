@@ -58,7 +58,7 @@ Trois agents sur Amazon Bedrock :
 
 | Agent | Rôle |
 | --- | --- |
-| **Assistant** | Répond au client. Il connaît son profil et son portefeuille, et a quatre outils : `research_company` (lance l'agent de recherche, si `RESEARCH_HARNESS_ARN` est défini), `find_similar_companies` (sociétés comparables, tirées de la base, donc avec une base seulement), `get_portfolio_details` et `set_report_schedule` (programme les rapports). Il rédige aussi les rapports. Un refus est relancé sur Claude Opus 4.8 |
+| **Assistant** | Répond au client. Il connaît son profil et son portefeuille, et a quatre outils : `research_company` (lance l'agent de recherche), `find_similar_companies` (sociétés comparables, tirées de la base, donc avec une base seulement), `get_portfolio_details` et `set_report_schedule` (programme les rapports). Il rédige aussi les rapports. Un refus est relancé sur Claude Opus 4.8 |
 | **Recherche** | Cherche les faits sur une société et renvoie un rapport sourcé |
 | **Relecteur** | Pour les questions de jugement seulement (acheter, vendre, est-ce risqué…) : évalue la qualité, la fraîcheur et l'équilibre des sources, et rend un verdict (`SOLID`, `PARTIAL`, `WEAK`) avec des points de vigilance |
 
