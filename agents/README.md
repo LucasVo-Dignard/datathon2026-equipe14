@@ -7,7 +7,8 @@ That tool invokes the **AgentCore research harness** (`app/research.js`), which:
 1. queries the **earnings releases knowledge base**, filtered on the company's
    stock symbol (Bedrock managed knowledge base, through AgentCore Gateway);
 2. if the knowledge base has nothing useful, queries **Bigdata.com** (premium
-   financial data, limited credits, at most 2 calls per research);
+   financial data, limited credits, at most 3 calls per research: the company,
+   plus one sector, market or economic context call when the question needs it);
 3. if still needed, searches the web with the **AgentCore Web Search Tool**
    (one search, a second only if the first gives nothing);
 4. returns a factual report with its sources.
@@ -76,14 +77,14 @@ Not managed by Terraform yet. All names start with `datathon2026-equipe14-andre`
 | AgentCore Gateway (MCP, `AWS_IAM` inbound auth) | `datathon2026-equipe14-andre-research-nd2eo2zt0r` |
 | Gateway targets | `earnings-kb` (connector `bedrock-knowledge-bases`, Retrieve), `web-search` (connector `web-search`) |
 | IAM role of the gateway | `datathon2026-equipe14-andre-gateway` (Retrieve on this KB, InvokeWebSearch) |
-| AgentCore harness | `datathon2026_equipe14_andre_research-bY6QdFJGK1` (Claude Opus 5.5, tools limited to the gateway, no memory, 6 iterations, 180 s) |
+| AgentCore harness | `datathon2026_equipe14_andre_research-bY6QdFJGK1` (Claude Opus 5.5, tools limited to the gateway, no memory, 7 iterations, 180 s) |
 | AgentCore reviewer harness | `datathon2026_equipe14_andre_reviewer-ihPa2Cogb4` (Claude Opus 5.5, tools: knowledge base Retrieve and web search only, 1 spot-check, 3 iterations, 150 s) |
 | IAM role of the harnesses | `datathon2026-equipe14-andre-harness` (research and reviewer) |
 | Bigdata.com API key | Secrets Manager `datathon2026-equipe14-andre/bigdata-api-key` (JSON `{"api_key": "..."}`) |
 | AgentCore Identity credential | `datathon2026-equipe14-andre-bigdata` (API key provider, `EXTERNAL`: reads the secret above) |
 | Gateway target `bigdata` | `FQZ7Y2EEGX`, MCP server `https://mcp.bigdata.com/`, key sent in `x-api-key` |
 | Gateway rate limit | 6 requests per minute on the `bigdata` target |
-| Web server permissions | Terraform, `infra/iam.tf` (`invoke-research-harness`, `save-research-reports`) |
+| Web server permissions | Terraform, `infra/iam.tf` (`invoke-research-harness`, `invoke-research-gateway`, `save-research-reports`) |
 
 ### Prod (created the same way, names without `-andre`)
 
@@ -102,7 +103,9 @@ next to the alert settings), with `BIGDATA_DAILY_CALLS=9`.
 The app reads its configuration from environment variables: `RESEARCH_HARNESS_ARN`,
 `RESEARCH_REVIEWER_ARN` (peer review; unset = no review),
 `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` (where to save
-reports) and `BIGDATA_DAILY_CALLS` (budget, default 9):
+reports), `RESEARCH_GATEWAY_URL` (the gateway's MCP URL, for the daily market
+snapshot: `aws bedrock-agentcore-control get-gateway --gateway-identifier <id>
+--query gatewayUrl`) and `BIGDATA_DAILY_CALLS` (budget, default 9):
 
 - locally: in `.env-dev` (gitignored), loaded by `npm run dev`;
 - on the EC2: in `/etc/chatbot.env` (set by hand through SSM; lost if the
@@ -139,15 +142,39 @@ The harness has no AWS CLI invoke command (streaming API): use the app, or
 
 ## Bigdata.com credits
 
-- Measured cost: about **10 credits per Bigdata.com call** (a research makes at most
-  2 calls, so about 20 credits, US$0.20). The plan started with 1,000 credits.
-- The harness may only use 3 read tools: `find_securities`, `bigdata_company_tearsheet`
-  and `bigdata_search` (`allowedTools`). The tools that write to the Bigdata.com
-  account (monitors, watchlists, uploads) are not allowed.
+- Measured cost (balance before and after, November 2026): the market
+  tearsheet alone costs **17 credits** (US$0.17); a research with
+  `find_securities` and `bigdata_company_tearsheet` costs about **39 credits**
+  (the older figure of 10 credits per call is too low for the tearsheet). The
+  plan started with 1,000 credits.
+- The harness may only use 6 read tools (`allowedTools`):
+  - `find_securities`, then `bigdata_company_tearsheet` or `bigdata_search` for
+    the company;
+  - one context call, only for questions about the sector, the market or the
+    economy, or for judgment requests: `bigdata_market_tearsheet` (no
+    parameters: the 11 US sectors, indexes, commodities, currencies, yields),
+    `bigdata_country_tearsheet` (one country code: macro data, economic
+    calendar) or `bigdata_etf_tearsheet` (a sector ETF; it needs its own
+    `find_securities` call, so only when the 3-call limit allows it).
+
+  The tools that write to the Bigdata.com account (monitors, watchlists,
+  uploads) are not allowed. Both harnesses (andre and prod) have this prompt
+  and `maxIterations` 7.
+- **Daily market snapshot.** The market tearsheet is the same for every
+  company, so when `RESEARCH_GATEWAY_URL` is set the app buys it once per UTC
+  day itself (signed MCP call to the gateway, `bedrock-agentcore:InvokeGateway`,
+  see `infra/iam.tf`), saves it in `bigdata-market.json` next to the usage
+  counter, and keeps only the useful sections (Americas markets, US sectors,
+  North American indexes, US yields, energy and metals, style factors: about
+  10,000 characters). It is added to the research request when the chat agent
+  sets `needs_market_context` (sector, market or macro questions) and for every
+  judgment request; the harness then never gets `bigdata_market_tearsheet`.
+  The snapshot counts as one call in the daily budget. Without
+  `RESEARCH_GATEWAY_URL`, the harness calls the market tearsheet itself.
 - `app/research.js` counts the Bigdata.com calls per day (UTC) in
   `bigdata-usage.json` next to the app data. When less than one research (3 calls)
   is left in `BIGDATA_DAILY_CALLS`, the harness is invoked without the Bigdata.com
-  tools until the next day. Each research reserves 2 calls before it starts, so
+  tools until the next day. Each research reserves 3 calls before it starts, so
   parallel researches (judgment requests) cannot exceed the budget together. Each server (local, EC2) has its own counter, but they
   share the same Bigdata.com account.
 - Check the balance on https://app.bigdata.com/usage, or with the free
