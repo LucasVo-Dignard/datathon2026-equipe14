@@ -139,9 +139,9 @@ Scheduler, avec une seule image (`infra-batch/Dockerfile`).
 
 | Job | Quand | Ce qu'il fait |
 | --- | --- | --- |
-| `src/marketdata/jobs/daily-refresh.js` | Jours de semaine, 18 h (après la clôture) | Pour chaque titre suivi (`tracked_symbols`, ≈ 1 000 en prod) : profil, indicateurs, objectif de cours, cours des 7 derniers jours, actions d'analystes et composition des FNB, depuis Yahoo (60 appels/min, environ 2 h 15). Les titres détenus par les abonnés aux alertes passent en premier, puis les alertes de prix partent (`price-alerts.js`) |
+| `src/marketdata/jobs/daily-refresh.js` | Jours de semaine, 18 h (après la clôture) | Met à jour les données Yahoo (prix, profil, analystes, ETF) de chaque titre de `tracked_symbols`, puis envoie les alertes de prix (`price-alerts.js`) |
 | `src/marketdata/jobs/news-refresh.js` | Toutes les 2 h, de 7 h à 23 h | Flux RSS des médias, et news Yahoo de 80 titres détenus au plus. Chaque nouvel article passe par Comprehend (ton, sociétés nommées). Les articles de plus de 30 jours sont supprimés |
-| `src/marketdata/jobs/populate-top-companies.js` | À la main, une fois | Prend les N plus grosses capitalisations de companiesmarketcap.com, enregistre leur profil Yahoo et les ajoute à `tracked_symbols` (1 000 sociétés : environ 17 min) |
+| `src/marketdata/jobs/populate-top-companies.js` | À la main, une fois | Prend les N plus grosses capitalisations de companiesmarketcap.com, enregistre leur profil Yahoo et les ajoute à `tracked_symbols` |
 
 **Conditions des flux RSS.** Ils sont offerts pour l'usage personnel et pour les
 agrégateurs qui affichent le titre et un court extrait, avec un lien vers l'article
