@@ -1,11 +1,21 @@
 # Chatbot (prototype)
 
-Node.js server with no dependencies: username-only login (no password, this is
-a prototype), conversations per user, data in a JSON file.
+Node.js server: username-only login (no password, this is
+a prototype), conversations per user. Profiles and conversations are stored in
+Postgres when `DATABASE_URL` is set; users and login sessions (and everything,
+without a database) are in a JSON file.
 
 - `server.js`: API (`/api/login`, `/api/chats`, ...) and static files
-- `bot.js`: **where the agents plug in**. Replace `reply()` with a call to your agents.
-  It receives the user's investor `profile` (or `null`).
+- `bot.js`: **the agent**. Claude Opus 5.5 on Amazon Bedrock
+  (`@anthropic-ai/bedrock-sdk`) writes the answers in Markdown from the
+  conversation and the user's investor `profile`. For questions about a
+  company it calls the `research_company` tool: `research.js` invokes the
+  AgentCore research harness (earnings releases knowledge base, then web
+  search), see `../agents/README.md`. Refusals fall back to Claude Opus 4.8.
+  `AGENT_MODEL` / `AGENT_EFFORT` override the model and effort,
+  `RESEARCH_HARNESS_ARN` enables the research.
+- `public/markdown.js`: safe Markdown renderer for the answers (DOM nodes only, no HTML).
+- `chat-store.js`: conversation history (see [Conversations](#conversations)).
 - `profile.js`: investor profile. Guided questionnaire, risk scoring, matching with the
   case personas (Amira, Mateo, Robert), tensions and guardrails for the agents.
 - `stocks.js`: quick view for the ticker search bar (`GET /api/stocks/:symbol`): name,
@@ -20,7 +30,9 @@ a prototype), conversations per user, data in a JSON file.
 Run locally:
 
 ```bash
-node app/server.js   # http://localhost:3000, data in app/data/db.json
+npm install
+npm run dev   # http://localhost:3000, loads AWS credentials from .env-aws,
+              # data in app/data/db.json
 ```
 
 Deployed to the EC2 by Terraform (see `../infra/README.md`).
@@ -70,8 +82,25 @@ app uses the JSON file. Users and sessions are still in the JSON file
 (login prototype). Once a SQL `users` table exists, add the foreign key in a new migration.
 All thresholds are prototype assumptions, for simulation only, not financial advice.
 
+## Conversations
+
+`chat-store.js` is the only file that reads or writes conversations, with the same
+rule as profiles:
+
+- **`DATABASE_URL` set** → Postgres: `chats` (id, owner, title, dates) and
+  `chat_messages` (one row per message, deleted with their chat). Created by
+  `db/migrations/V9__create_chats.sql`; the server refuses to start if they are missing.
+  The question and the agent's answer are saved together, once the answer is known.
+- **not set** → the prototype JSON file (`db.chats`).
+
+Conversations already in an environment's JSON file are not copied to the database.
+
 Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**
 database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`.
+
+On the EC2, the Docker image installs the SDK (`npm ci`), but the instance role
+still needs `bedrock-mantle:CreateInference` (see `infra/iam.tf`): until then
+the agent answers with an error message.
 
 ## Portfolio
 
