@@ -53,7 +53,7 @@ ordre : `infra/` (réseau, EC2, ECR, SES, S3), `infra-db/` (RDS) et `infra-batch
 
 ## Agents
 
-Trois agents, tous avec Claude sur Amazon Bedrock :
+Trois agents sur Amazon Bedrock :
 
 | Agent | Où | Rôle |
 | --- | --- | --- |
