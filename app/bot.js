@@ -1,8 +1,9 @@
 'use strict';
 // ---------------------------------------------------------------------------
-// Point de branchement des agents.
+// Agent de base : Claude via Amazon Bedrock, sans outils ni recherche.
 //
-// Remplacez le corps de reply() par l'appel à vos agents. La fonction reçoit :
+// reply() répond au message de l'utilisateur à partir de l'historique de la
+// conversation uniquement. Elle reçoit :
 //   - messages : l'historique complet [{ role: 'user' | 'assistant', content }],
 //                le dernier élément est le message que l'utilisateur vient d'envoyer
 //   - username : l'utilisateur connecté
@@ -12,16 +13,102 @@
 //                profileSummary(profile) en donne un résumé texte pour le prompt ;
 //                profile.guardrails et profile.tensions servent aux contrôles.
 //   - portfolio: le portefeuille du client (voir portfolio.js : summary, holdings, history),
-//                ou null s'il n'a pas encore choisi comment le créer
-// et doit retourner (ou résoudre) le texte de la réponse.
+//                ou null s'il n'a pas encore choisi comment le créer ; pas encore utilisé
+// et retourne le texte de la réponse.
+//
+// report() rédige un rapport (quotidien, hebdomadaire, mensuel ou annuel) à
+// partir des chiffres préparés par reports.js.
+//
+// Identifiants AWS : en local, ceux de .env-aws (chargés par `npm run dev`) ;
+// sur l'EC2, le rôle IAM de l'instance (il lui faut bedrock-mantle:CreateInference).
 // ---------------------------------------------------------------------------
 
-const { profileSummary } = require('./profile');
+const { AnthropicBedrockMantle } = require('@anthropic-ai/bedrock-sdk');
+const { betaRefusalFallbackMiddleware, BetaFallbackState } = require('@anthropic-ai/sdk');
 
-async function reply({ messages, profile }) {
-  const last = messages[messages.length - 1].content;
-  return `Agent pas encore branché (prototype). Vous avez écrit : « ${last} »\n\n`
-    + `Contexte transmis aux agents :\n${profileSummary(profile)}`;
+const MODEL = process.env.AGENT_MODEL || 'anthropic.claude-opus-5-5';
+// Claude Opus 5.5 defaults to medium; low keeps chat replies fast.
+const EFFORT = process.env.AGENT_EFFORT || 'low';
+// Only the most recent messages are sent, to bound cost on long chats.
+const MAX_HISTORY = 40;
+
+const PLAIN_TEXT = `L'interface affiche du texte brut : n'utilise pas de Markdown (pas de **gras**, de titres # ni de tableaux) ; des listes simples avec des tirets sont acceptées.`;
+
+const SYSTEM = `Tu es l'assistant de « Mon portefeuille », une application qui aide un client à suivre ses placements en actions.
+Réponds dans la langue de l'utilisateur (le français par défaut), de façon claire et concise.
+Tu n'as accès ni à Internet, ni aux données de marché en temps réel, ni au portefeuille du client : si une question en dépend, dis-le simplement et réponds avec ce que tu sais de façon générale.
+Tu ne donnes pas de conseil financier personnalisé : tu expliques les notions, les options et les risques pour que le client décide lui-même.
+${PLAIN_TEXT}`;
+
+const REPORT_SYSTEM = `Tu es l'assistant de « Mon portefeuille », une application qui aide des clients de Banque Nationale Courtage Direct, souvent pressés ou peu experts, à suivre leurs placements.
+Tu rédiges en français un rapport périodique sur le portefeuille du client, à partir uniquement des données fournies (portefeuille, performance, actualités, profil investisseur). N'invente aucun chiffre ni aucune nouvelle ; si une donnée manque, dis-le.
+Structure le rapport en courtes sections, chacune introduite par un titre sur sa propre ligne, en majuscules (par exemple EN BREF, PERFORMANCE, TITRES À SURVEILLER, ACTUALITÉS, COHÉRENCE AVEC VOTRE PROFIL, POINTS D'ATTENTION). Commence par EN BREF : deux ou trois phrases que le client peut lire en dix secondes.
+Adapte la longueur et le niveau de détail à la période : quotidien très court, annuel plus complet avec un bilan et des pistes de réflexion.
+Compare la composition du portefeuille aux garde-fous du profil (concentration sectorielle, nombre de titres, liquidités) et signale les écarts.
+Tu ne donnes pas de conseil financier personnalisé ni de recommandation d'achat ou de vente : tu expliques, tu signales et tu proposes des questions à se poser.
+Termine par une ligne rappelant que le rapport est simulé à titre informatif et ne constitue pas un conseil financier.
+${PLAIN_TEXT}`;
+
+let client = null;
+function getClient() {
+  // Created on first use so the server starts even without AWS credentials.
+  if (!client) {
+    client = new AnthropicBedrockMantle({
+      // Refusal fallback: Bedrock has no server-side `fallbacks` parameter,
+      // so the SDK middleware retries a declined request on Claude Opus 4.8.
+      middleware: [betaRefusalFallbackMiddleware([{ model: 'anthropic.claude-opus-4-8' }])],
+    });
+  }
+  return client;
 }
 
-module.exports = { reply };
+async function complete({ system, messages, fallbackState }) {
+  const response = await getClient().beta.messages.create(
+    {
+      model: MODEL,
+      max_tokens: 16000,
+      system,
+      output_config: { effort: EFFORT },
+      messages,
+    },
+    { fallbackState },
+  );
+
+  if (response.stop_reason === 'refusal') {
+    return 'Désolé, je ne peux pas répondre à cette demande.';
+  }
+  const text = response.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+    .trim();
+  if (response.stop_reason === 'max_tokens') {
+    return `${text}\n\n(Réponse tronquée : elle dépassait la longueur maximale.)`;
+  }
+  return text || 'Désolé, je n’ai pas de réponse à proposer.';
+}
+
+// One fallback state per conversation keeps a chat on the model that accepted.
+const fallbackStates = new Map();
+
+async function reply({ messages, chatId }) {
+  if (!fallbackStates.has(chatId)) fallbackStates.set(chatId, new BetaFallbackState());
+
+  // The history must start with a user turn: drop leading assistant messages
+  // left over after trimming.
+  const history = messages.slice(-MAX_HISTORY).map(({ role, content }) => ({ role, content }));
+  while (history.length && history[0].role !== 'user') history.shift();
+
+  return complete({ system: SYSTEM, messages: history, fallbackState: fallbackStates.get(chatId) });
+}
+
+// `brief` is the plain-text data sheet built by reports.js.
+async function report({ label, brief }) {
+  return complete({
+    system: REPORT_SYSTEM,
+    messages: [{ role: 'user', content: `Rédige mon rapport ${label}.\n\n${brief}` }],
+    fallbackState: new BetaFallbackState(),
+  });
+}
+
+module.exports = { reply, report };

@@ -6,7 +6,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { reply } = require('./bot');
+const { reply, report } = require('./bot');
+const reports = require('./reports');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { createPortfolioStore } = require('./portfolio-store');
@@ -23,6 +24,7 @@ const MAX_TITLE_CHARS = 80;
 const DEFAULT_TITLE = 'Nouvelle conversation';
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{1,32}$/u;
 const COOKIE = 'sid';
+const MAX_REPORTS = 20; // per user, oldest dropped first
 
 // ---------------------------------------------------------------------------
 // Storage
@@ -38,6 +40,7 @@ function loadDb() {
 }
 
 const db = loadDb();
+db.reports ??= {};
 
 function saveDb() {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -224,6 +227,54 @@ async function handleApi(req, res, pathname) {
     if (method === 'DELETE') return sendJson(res, 200, await portfolios.remove(user, symbol));
   }
 
+  if (pathname === '/api/reports') {
+    const own = () => Object.values(db.reports)
+      .filter((r) => r.owner === user)
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (method === 'GET') return sendJson(res, 200, own());
+    // Simulated report: { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }.
+    if (method === 'POST') {
+      const { period } = await readJson(req);
+      if (!Object.hasOwn(reports.PERIODS, period)) throw new HttpError(400, 'Période invalide');
+      const portfolio = await portfolios.get(user);
+      if (!portfolio) throw new HttpError(409, 'Créez d’abord votre portefeuille (onglet Portefeuille)');
+      const investorProfile = await profiles.get(user).then((p) => p?.result || null, (err) => {
+        console.error('profile load error:', err.message);
+        return null;
+      });
+      const brief = reports.buildBrief({ period, portfolio, profile: investorProfile });
+      let content;
+      try {
+        content = await report({ label: reports.PERIODS[period].label, brief });
+      } catch (err) {
+        console.error('report error:', err);
+        throw new HttpError(502, "L'agent n'a pas pu rédiger le rapport, réessayez plus tard");
+      }
+      const entry = {
+        id: crypto.randomUUID(),
+        owner: user,
+        period,
+        title: reports.PERIODS[period].title,
+        asOf: portfolio.asOf,
+        createdAt: Date.now(),
+        content: String(content),
+      };
+      db.reports[entry.id] = entry;
+      for (const old of own().slice(MAX_REPORTS)) delete db.reports[old.id];
+      saveDb();
+      return sendJson(res, 201, entry);
+    }
+  }
+
+  const reportMatch = pathname.match(/^\/api\/reports\/([0-9a-f-]{36})$/);
+  if (reportMatch && method === 'DELETE') {
+    const entry = Object.hasOwn(db.reports, reportMatch[1]) ? db.reports[reportMatch[1]] : null;
+    if (!entry || entry.owner !== user) throw new HttpError(404, 'Rapport introuvable');
+    delete db.reports[entry.id];
+    saveDb();
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (pathname === '/api/macro' && method === 'GET') {
     try {
       return sendJson(res, 200, await macro.overview());
@@ -352,6 +403,7 @@ const STATIC = {
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
   '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
   '/macro.js': ['macro.js', 'text/javascript; charset=utf-8'],
+  '/reports.js': ['reports.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };

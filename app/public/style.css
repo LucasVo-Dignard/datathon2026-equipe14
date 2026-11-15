@@ -231,8 +231,10 @@ h1, h2, h3 { margin: 0; }
 .top-tabs button[aria-pressed="true"] { background: var(--hover); color: var(--text); font-weight: 600; }
 .app[data-tab="profile"] .dashboard,
 .app[data-tab="macro"] .dashboard,
+.app[data-tab="reports"] .dashboard,
 .app:not([data-tab="profile"]) .profile,
-.app:not([data-tab="macro"]) .macro { display: none; }
+.app:not([data-tab="macro"]) .macro,
+.app:not([data-tab="reports"]) .reports { display: none; }
 
 /* --------------------------------------------------------------- Macro */
 .macro { overflow-y: auto; min-width: 0; }
@@ -247,6 +249,24 @@ h1, h2, h3 { margin: 0; }
 .macro .table td a:hover { text-decoration-color: currentColor; }
 .macro-sources { margin-top: 12px; }
 .macro-sources p { margin: 0; }
+
+/* ------------------------------------------------------------- Reports */
+.reports { overflow-y: auto; min-width: 0; }
+.reports-body { padding: 20px; display: flex; flex-direction: column; gap: 4px; }
+.reports-body h1 { font-size: 1.4rem; }
+.reports-body > p { margin: 0; }
+.report-periods { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.report-periods button {
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-weight: 600;
+}
+.report-periods button:hover { border-color: var(--accent); }
+.report-periods button:disabled { opacity: 0.6; cursor: progress; }
+.reports-list { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; }
+.report-text { margin: 0; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-text .report-heading { display: block; font-weight: 700; margin-top: 12px; letter-spacing: 0.02em; }
+.report-text .report-heading:first-child { margin-top: 0; }
+.report-delete { padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-size: 0.85rem; }
+.report-delete:hover { color: var(--down); }
 
 /* ----------------------------------------------------- Investor profile */
 .badge {
@@ -395,10 +415,12 @@ h1, h2, h3 { margin: 0; }
   .app[data-tab="portfolio"] .assistant,
   .app[data-tab="profile"] .assistant,
   .app[data-tab="macro"] .assistant,
+  .app[data-tab="reports"] .assistant,
   .app[data-tab="assistant"] .dashboard { display: none; }
   .top-tabs { display: none; }
   .profile-body { padding: 16px 12px 32px; }
   .macro-body { padding: 12px; }
+  .reports-body { padding: 12px; }
   .assistant { border-left: 0; }
 
   .tabbar {

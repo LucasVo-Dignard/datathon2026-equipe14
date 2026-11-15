@@ -34,6 +34,7 @@
         <button data-tab="portfolio" aria-pressed="true">Portefeuille</button>
         <button data-tab="profile" aria-pressed="false">Mon profil <span class="badge todo" data-profile-badge>À compléter</span></button>
         <button data-tab="macro" aria-pressed="false">Macro</button>
+        <button data-tab="reports" aria-pressed="false">Rapports</button>
       </nav>
       <form id="stock-search" class="stock-search" role="search">
         <input id="stock-query" type="search" placeholder="Rechercher un symbole (ex. RY)" aria-label="Symbole boursier"
@@ -178,6 +179,24 @@
         </div>
       </main>
 
+      <!-- Simulated reports (replaces the dashboard pane) -->
+      <main id="reports-view" class="reports" aria-label="Rapports">
+        <div class="reports-body">
+          <h1>Rapports</h1>
+          <p class="muted small">Simulez le rapport que vous recevriez pour la période choisie. L’assistant le rédige à
+            partir de votre portefeuille, de ses actualités et de votre profil investisseur.</p>
+          <div id="report-periods" class="report-periods" role="group" aria-label="Générer un rapport">
+            <button type="button" data-period="daily">Quotidien</button>
+            <button type="button" data-period="weekly">Hebdomadaire</button>
+            <button type="button" data-period="monthly">Mensuel</button>
+            <button type="button" data-period="yearly">Annuel</button>
+          </div>
+          <p id="reports-status" class="muted small" role="status"></p>
+          <p id="reports-error" class="error" role="alert"></p>
+          <div id="reports-list" class="reports-list"></div>
+        </div>
+      </main>
+
       <!-- Assistant -->
       <aside id="assistant" class="assistant" aria-label="Assistant">
         <header class="assistant-head">
@@ -210,6 +229,7 @@
       <button data-tab="portfolio" aria-pressed="true">Portefeuille</button>
       <button data-tab="profile" aria-pressed="false">Profil</button>
       <button data-tab="macro" aria-pressed="false">Macro</button>
+      <button data-tab="reports" aria-pressed="false">Rapports</button>
       <button data-tab="assistant" aria-pressed="false">Assistant</button>
     </nav>
   </div>
@@ -235,6 +255,7 @@
   <script src="/profile-ui.js"></script>
   <script src="/stock-search.js"></script>
   <script src="/macro.js"></script>
+  <script src="/reports.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
