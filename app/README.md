@@ -26,6 +26,7 @@ without a database) are in a JSON file.
   it first loads it from Yahoo with `src/marketdata` and saves it: profile, metrics,
   price target, rating actions, and a year of daily prices on the first load
   (the last week afterwards). Without a database, it asks Yahoo and saves nothing.
+  For an ETF it also returns its composition (`fund`, see [ETFs](#etfs)).
 - `public/`: interface (HTML/CSS/JS). `profile-ui.js` is the questionnaire and result page.
 - `portfolio.js` / `portfolio-store.js`: the user's simulated portfolio (see below).
 
@@ -126,6 +127,30 @@ API (logged-in user): `GET /api/portfolio` (`null` until the user has chosen),
 Storage works like profiles: with `DATABASE_URL`, tables `portfolios` and
 `portfolio_holdings` (migration `V7__create_portfolios.sql`, the server refuses to
 start without it). Otherwise `db.users[username].portfolio` in the JSON file.
+
+## ETFs
+
+A holding can be an ETF (or a mutual fund): add it like a stock (`XEQT.TO`, `QQQ`...).
+Its composition comes from the same Yahoo quote summary as the profile (modules
+`quoteType`, `fundProfile`, `topHoldings`): sector weights, top holdings, and the
+stock / bond / cash split. `stocks.fund(symbol)` returns it (null for a stock); with
+`DATABASE_URL` it is stored in `fund_compositions` (migration V11, one row per
+looked-up symbol, funds or not) and fetched again after a week; the daily refresh
+also saves it (step `yahoo.fund_composition`). Without the table it asks Yahoo and
+saves nothing.
+
+- Portfolio: each holding has `fund` (composition or null); "Mes actions" shows an
+  FNB tag, and the quick view lists the ETF's main sectors and holdings.
+- Reports: sector exposure looks through ETFs (weight × the fund's sector weights).
+  ETFs have no published country split, so they get their own region line instead of
+  being guessed from the listing (`XEQT.TO` is global).
+- Preferences: in the profile's sector question, one click marks a sector of interest,
+  a second click a sector to avoid (`avoidSectors`, guardrail `avoidedSectors`), a
+  third clears it. The report flags holdings at odds with the profile
+  (`reports.preferenceFlags`): stocks in an avoided sector, and ETFs where an avoided
+  sector weighs 10 % or more of the fund. Excluded activities count too: fossil fuels by
+  the Energy sector, weapons and tobacco by keywords in the fund's name, category or top
+  holdings. The flags get their own report section and a "Hors de vos préférences" tile.
 
 ## Reports
 

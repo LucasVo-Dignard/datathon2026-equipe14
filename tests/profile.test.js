@@ -29,6 +29,16 @@ test('Mateo: ESG exclusions are passed to the agents', () => {
   assert.equal(r.guardrails.maxCryptoShare, 0);
 });
 
+test('sectors to avoid (second click on a sector) are kept apart from interests', () => {
+  const r = profileOf({ ...persona('robert'), sectors: ['health', 'finance'], avoidSectors: ['energy', 'finance', 'energy'] });
+  assert.deepEqual(r.guardrails.avoidedSectors, ['energy']); // a sector can't be both wanted and avoided
+  assert.deepEqual(r.preferences.avoidSectors, ['Énergie']);
+  assert.match(profileSummary(r), /Secteurs à éviter : Énergie\./);
+  assert.deepEqual(profileOf(persona('robert')).guardrails.avoidedSectors, []); // older answers have none
+  assert.throws(() => validate({ ...persona('robert'), avoidSectors: ['nope'] }), ProfileError);
+  assert.equal(publicQuestionnaire().questions.find((q) => q.id === 'sectors').avoidable, 'avoidSectors');
+});
+
 test('Robert: attraction to hyped stocks is flagged against his profile', () => {
   const r = profileOf(persona('robert'));
   assert.ok(titles(r).includes('Attention aux titres très médiatisés'));

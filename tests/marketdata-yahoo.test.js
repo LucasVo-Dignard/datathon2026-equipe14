@@ -10,8 +10,9 @@ const {
   YahooPriceTargetFetcher,
   YahooProfileFetcher,
   YahooRatingActionFetcher,
+  YahooFundCompositionFetcher,
 } = require('../src/marketdata/providers/yahoo');
-const { upside } = require('../src/marketdata/models');
+const { upside, isFund } = require('../src/marketdata/models');
 const { DateRange } = require('../src/marketdata/values');
 
 const NVDA_INFO = {
@@ -25,11 +26,13 @@ const NVDA_INFO = {
 };
 
 class FakeYahooClient {
-  constructor({ info = {}, history = { bars: [], currency: null }, grades = [] } = {}) {
-    Object.assign(this, { infoValue: info, historyValue: history, grades, historyCalls: [] });
+  constructor({ info = {}, history = { bars: [], currency: null }, grades = [], fund = {} } = {}) {
+    Object.assign(this, { infoValue: info, historyValue: history, grades, fundValue: fund, historyCalls: [] });
   }
 
   async info() { return this.infoValue; }
+
+  async fund() { return this.fundValue; }
 
   async upgradesDowngrades() { return this.grades; }
 
@@ -46,6 +49,7 @@ test('fetchers implement the abstract kinds', () => {
   assert.ok(new YahooPriceHistoryFetcher(client) instanceof base.PriceHistoryFetcher);
   assert.ok(new YahooPriceTargetFetcher(client) instanceof base.PriceTargetFetcher);
   assert.ok(new YahooRatingActionFetcher(client) instanceof base.RatingActionFetcher);
+  assert.ok(new YahooFundCompositionFetcher(client) instanceof base.FundCompositionFetcher);
   assert.equal(YahooProfileFetcher.provider, 'yahoo');
   assert.equal(new YahooProfileFetcher(client).provider, 'yahoo');
 });
@@ -167,6 +171,49 @@ test('rating actions without target fields', async () => {
 });
 
 // --- Client (with a fake yahoo-finance2 library) --------------------------------
+
+test('fund composition: sector keys mapped, holdings sorted, stocks are not funds', async () => {
+  const etf = await new YahooFundCompositionFetcher(new FakeYahooClient({
+    info: { longName: 'iShares S&P/TSX Capped Energy Index ETF' },
+    fund: {
+      quoteType: 'ETF', category: null, family: 'BlackRock', stockPosition: 0.9996, bondPosition: 0, cashPosition: 0.0004,
+      sectorWeightings: [{ realestate: 0 }, { energy: 1 }, { technology: 0 }],
+      holdings: [{ symbol: 'CNQ.TO', holdingName: 'Canadian Natural', holdingPercent: 0.25 },
+        { symbol: 'SU.TO', holdingName: 'Suncor', holdingPercent: 0.27 }, { symbol: 'X', holdingName: 'Zero', holdingPercent: 0 }],
+    },
+  })).fetch('xeg.to');
+  assert.equal(etf.symbol, 'XEG.TO');
+  assert.ok(isFund(etf));
+  assert.deepEqual(etf.sectorWeights, { Energy: 1 });
+  assert.deepEqual(etf.topHoldings.map((h) => h.symbol), ['SU.TO', 'CNQ.TO']);
+  assert.equal(etf.family, 'BlackRock');
+
+  const stock = await new YahooFundCompositionFetcher(new FakeYahooClient({ info: NVDA_INFO, fund: { quoteType: 'EQUITY' } }))
+    .fetch('NVDA');
+  assert.equal(stock.quoteType, 'EQUITY');
+  assert.ok(!isFund(stock));
+  assert.deepEqual(stock.sectorWeights, {});
+
+  await assert.rejects(new YahooFundCompositionFetcher(new FakeYahooClient()).fetch('NOPE'), SymbolNotFoundError);
+});
+
+test('client reads fund modules from the same quote summary', async () => {
+  const library = fakeLibrary({
+    summary: {
+      price: { longName: 'Invesco QQQ Trust' },
+      quoteType: { quoteType: 'ETF' },
+      fundProfile: { family: 'Invesco', categoryName: 'Large Growth' },
+      topHoldings: { stockPosition: 0.998, sectorWeightings: [{ technology: 0.58 }], holdings: [{ symbol: 'AAPL', holdingPercent: 0.08 }] },
+    },
+  });
+  const client = new YahooClient({ library });
+  await client.info('QQQ');
+  const fund = await client.fund('QQQ');
+  assert.equal(library.calls.quoteSummary, 1);
+  assert.deepEqual([fund.quoteType, fund.family, fund.category, fund.stockPosition], ['ETF', 'Invesco', 'Large Growth', 0.998]);
+  assert.deepEqual(fund.sectorWeightings, [{ technology: 0.58 }]);
+  assert.equal(fund.holdings[0].symbol, 'AAPL');
+});
 
 function fakeLibrary({ summary, chart } = {}) {
   const calls = { quoteSummary: 0, chart: [] };

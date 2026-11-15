@@ -45,6 +45,23 @@ function shuffled(items) {
 
 // A start close more than this before the requested date is a data gap, not a start.
 const MAX_START_GAP_DAYS = 10;
+// Fund holdings change slowly: re-fetch a composition once a week.
+const FUND_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// What the app needs from a FundComposition; null for anything but a fund.
+function asFund(c) {
+  if (!marketdata.models.isFund(c)) return null;
+  return {
+    type: c.quoteType,
+    category: c.category || null,
+    family: c.family || null,
+    stockPosition: c.stockPosition ?? null,
+    bondPosition: c.bondPosition ?? null,
+    cashPosition: c.cashPosition ?? null,
+    sectorWeights: c.sectorWeights || {},
+    topHoldings: c.topHoldings || [],
+  };
+}
 
 const daysBetween = (a, b) => (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400e3;
 
@@ -143,12 +160,38 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     return toChange(start, end, fromDate) || yahooChange(history, symbol, fromDate);
   }
 
-  return { lookup, randomSymbols, changeSince, close: () => pool.end() };
+  // Fund composition (null for a stock): stored, or fetched from Yahoo and
+  // saved when missing or older than FUND_STALE_MS (a fund's holdings move slowly).
+  const funds = new marketdata.yahoo.YahooFundCompositionFetcher(yahooClient);
+  async function fund(symbol) {
+    let cached = null;
+    try {
+      cached = await repo.fundComposition(pool, symbol);
+    } catch (err) {
+      // Table missing (migration V11 not applied yet): ask Yahoo, save nothing.
+      log.error(`fund composition read error (${symbol}):`, err.message);
+      return asFund(await funds.fetch(symbol));
+    }
+    if (cached && now() - cached.fetchedAt.getTime() < FUND_STALE_MS) return asFund(cached);
+    try {
+      const fresh = await funds.fetch(symbol);
+      await repo.saveFundComposition(pool, fresh);
+      return asFund(fresh);
+    } catch (err) {
+      log.error(`fund composition load error (${symbol}):`, err.message);
+      if (cached) return asFund(cached);
+      throw err;
+    }
+  }
+
+  return { lookup, randomSymbols, changeSince, fund, close: () => pool.end() };
 }
 
-function createLiveLookup({ yahooClient }) {
+function createLiveLookup({ yahooClient, now }) {
   const profiles = new marketdata.yahoo.YahooProfileFetcher(yahooClient);
   const history = new marketdata.yahoo.YahooPriceHistoryFetcher(yahooClient);
+  const funds = new marketdata.yahoo.YahooFundCompositionFetcher(yahooClient);
+  const fundCache = new Map(); // symbol -> { at, promise }, nothing is saved without a database
 
   async function lookup(symbol) {
     let profile;
@@ -179,6 +222,14 @@ function createLiveLookup({ yahooClient }) {
     lookup,
     randomSymbols: async (count) => shuffled(FALLBACK_SYMBOLS).slice(0, count),
     changeSince: (symbol, fromDate) => yahooChange(history, symbol, fromDate),
+    fund(symbol) {
+      const hit = fundCache.get(symbol);
+      if (hit && now() - hit.at < FUND_STALE_MS) return hit.promise;
+      const promise = funds.fetch(symbol).then(asFund);
+      fundCache.set(symbol, { at: now(), promise });
+      promise.catch(() => fundCache.delete(symbol));
+      return promise;
+    },
     close: async () => {},
   };
 }
@@ -191,7 +242,7 @@ function createStockLookup({
 } = {}) {
   return connectionString
     ? createDbLookup({ connectionString, yahooClient, now, log })
-    : createLiveLookup({ yahooClient });
+    : createLiveLookup({ yahooClient, now });
 }
 
 module.exports = { createStockLookup, normalizeSymbol, STALE_MS };

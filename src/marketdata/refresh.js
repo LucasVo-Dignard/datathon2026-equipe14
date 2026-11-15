@@ -27,12 +27,15 @@ function yahooSteps(client, { today = localToday(), priceDays = LOOKBACK_DAYS } 
   const target = new yahoo.YahooPriceTargetFetcher(client);
   const history = new yahoo.YahooPriceHistoryFetcher(client);
   const ratings = new yahoo.YahooRatingActionFetcher(client);
+  const fund = new yahoo.YahooFundCompositionFetcher(client);
   return [
     ['yahoo.profile', async (db, s) => repo.saveProfile(db, await profile.fetch(s))],
     ['yahoo.metrics', async (db, s) => repo.saveMetrics(db, await metrics.fetch(s))],
     ['yahoo.price_target', async (db, s) => repo.savePriceTarget(db, await target.fetch(s))],
     ['yahoo.prices', async (db, s) => repo.savePriceBars(db, await history.fetch(s, prices))],
     ['yahoo.rating_actions', async (db, s) => repo.saveRatingActions(db, await ratings.fetch(s, recent))],
+    // Same quote summary as the profile: no extra request.
+    ['yahoo.fund_composition', async (db, s) => repo.saveFundComposition(db, await fund.fetch(s))],
   ];
 }
 

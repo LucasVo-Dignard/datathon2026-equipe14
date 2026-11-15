@@ -138,6 +138,39 @@ async function saveRecommendations(db, trends) {
     `ON CONFLICT (symbol, provider, period) DO UPDATE SET ${updateAll(TREND_COLUMNS)}`);
 }
 
+const FUND_COLUMNS = ['quote_type', 'category', 'family', 'stock_position', 'bond_position', 'cash_position',
+  'sector_weights', 'top_holdings', 'fetched_at'];
+
+async function saveFundComposition(db, c) {
+  await insertMany(db, 'fund_compositions', ['symbol', 'provider', ...FUND_COLUMNS],
+    [[c.symbol, c.provider, c.quoteType, c.category, c.family, c.stockPosition, c.bondPosition, c.cashPosition,
+      JSON.stringify(c.sectorWeights ?? {}), JSON.stringify(c.topHoldings ?? []), c.fetchedAt]],
+    `ON CONFLICT (symbol, provider) DO UPDATE SET ${updateAll(FUND_COLUMNS)}`);
+}
+
+// Latest composition of `symbol` (any provider), or null if never checked.
+async function fundComposition(db, symbol) {
+  const { rows: [r] } = await db.query(
+    `SELECT symbol, provider, quote_type, category, family, stock_position::float8 AS stock_position,
+            bond_position::float8 AS bond_position, cash_position::float8 AS cash_position,
+            sector_weights, top_holdings, fetched_at
+       FROM fund_compositions WHERE symbol = $1 ORDER BY fetched_at DESC LIMIT 1`, [symbol]);
+  if (!r) return null;
+  return {
+    symbol: r.symbol,
+    provider: r.provider,
+    quoteType: r.quote_type,
+    category: r.category,
+    family: r.family,
+    stockPosition: r.stock_position,
+    bondPosition: r.bond_position,
+    cashPosition: r.cash_position,
+    sectorWeights: r.sector_weights || {},
+    topHoldings: r.top_holdings || [],
+    fetchedAt: r.fetched_at,
+  };
+}
+
 // --- Macro data --------------------------------------------------------------
 
 const MACRO_COLUMNS = ['value', 'country_name', 'indicator_name', 'dataset', 'source_organization',
@@ -229,4 +262,6 @@ module.exports = {
   macroObservations,
   latestQuote,
   closeOnOrBefore,
+  saveFundComposition,
+  fundComposition,
 };

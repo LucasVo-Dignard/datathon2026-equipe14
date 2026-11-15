@@ -140,6 +140,25 @@ const analystRatingAction = model('AnalystRatingAction', ['symbol', 'gradedAt', 
   fetchedAt: now,
 });
 
+// What a fund holds. `quoteType` is the provider's security type ("ETF",
+// "MUTUALFUND", "EQUITY", ...): non-funds get a composition too, with empty
+// weights, so callers know the symbol was checked. `sectorWeights` maps a
+// sector name (same names as CompanyProfile.sector) to a fraction;
+// `topHoldings` is [{ symbol, name, weight }], largest first.
+const fundComposition = model('FundComposition', ['symbol', 'provider', 'quoteType'], {
+  category: null,
+  family: null,
+  stockPosition: null,
+  bondPosition: null,
+  cashPosition: null,
+  sectorWeights: () => ({}),
+  topHoldings: () => [],
+  fetchedAt: now,
+});
+
+const FUND_TYPES = new Set(['ETF', 'MUTUALFUND']);
+const isFund = (c) => FUND_TYPES.has(c?.quoteType);
+
 // One yearly value of a macroeconomic indicator for a country or region.
 // `country` is an ISO 3166-1 alpha-3 code ("CAN") or a provider aggregate
 // ("WLD" for the world, "EMU" for the euro area). Exception to the fraction
@@ -173,5 +192,7 @@ module.exports = {
   priceTargetConsensus,
   upside,
   analystRatingAction,
+  fundComposition,
+  isFund,
   macroObservation,
 };

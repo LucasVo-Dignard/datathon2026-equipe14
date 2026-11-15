@@ -65,6 +65,8 @@ class PriceHistoryFetcher extends RangeFetcher {}
 class NewsFetcher extends RangeFetcher {}
 /** Earnings releases (past and scheduled). */
 class EarningsFetcher extends RangeFetcher {}
+/** What a fund (ETF, mutual fund) holds: sector weights, top holdings. */
+class FundCompositionFetcher extends SymbolFetcher {}
 
 // Yearly macroeconomic indicator (GDP growth, inflation, ...) for one or more
 // countries over a YearRange. Resolves to an empty list when the provider has
@@ -90,5 +92,6 @@ module.exports = {
   PriceHistoryFetcher,
   NewsFetcher,
   EarningsFetcher,
+  FundCompositionFetcher,
   MacroIndicatorFetcher,
 };

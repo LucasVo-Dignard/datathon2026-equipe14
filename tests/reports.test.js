@@ -2,7 +2,7 @@
 // Report data sheet (no agent call).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildBrief, periodStart, periodFrom, analyze, highlights, exposures, issuerCountry, PERIODS } = require('../app/reports');
+const { buildBrief, periodStart, periodFrom, analyze, highlights, exposures, preferenceFlags, issuerCountry, PERIODS } = require('../app/reports');
 
 const HISTORY = [
   { date: '2025-11-14', value: 900 },
@@ -66,8 +66,8 @@ test('brief has percentages and dates, never amounts', () => {
   const weekly = buildBrief({ period: 'weekly', portfolio: PORTFOLIO, profile: null, now: NOW });
   assert.match(weekly, /rapport hebdomadaire/);
   assert.match(weekly, /du 6 novembre 2026 au 14 novembre 2026 : \+2,04 %/); // 980 -> 1000
-  assert.match(weekly, /RY\.TO ; Royal Bank ; Finance ; Canada ; CAD ; 50,0 % ; variation indisponible ; \+12,50 %/);
-  assert.match(weekly, /AAPL ; Apple ; Technologie ; États-Unis ; USD/);
+  assert.match(weekly, /RY\.TO ; Royal Bank ; action ; Finance ; Canada ; CAD ; 50,0 % ; variation indisponible ; \+12,50 %/);
+  assert.match(weekly, /AAPL ; Apple ; action ; Technologie ; États-Unis ; USD/);
   assert.match(weekly, /Liquidités : 10,0 %/);
   assert.match(weekly, /EXPOSITION PAR RÉGION[^\n]*\n- Amérique du Nord : 90,0 %\n- Europe : 10,0 %/);
   assert.match(weekly, /EXPOSITION PAR DEVISE[^\n]*\n- CAD : 55,0 %\n- USD : 45,0 %/);
@@ -91,8 +91,8 @@ test('period reports use each stock\'s move over the period, never the last sess
   const monthly = buildBrief({ period: 'monthly', portfolio: PORTFOLIO, profile: null, changes, now: NOW });
   assert.doesNotMatch(monthly, /Dernière séance :|\+1,01 %|-2,00 %/); // summary and holdings day changes
   assert.match(monthly, /variation du cours sur la période/);
-  assert.match(monthly, /RY\.TO ; Royal Bank ; Finance ; Canada ; CAD ; 50,0 % ; \+4,00 % ; \+12,50 %/);
-  assert.match(monthly, /ASML ; ASML ; Technologie ; Pays-Bas ; USD ; 10,0 % ; variation indisponible/);
+  assert.match(monthly, /RY\.TO ; Royal Bank ; action ; Finance ; Canada ; CAD ; 50,0 % ; \+4,00 % ; \+12,50 %/);
+  assert.match(monthly, /ASML ; ASML ; action ; Technologie ; Pays-Bas ; USD ; 10,0 % ; variation indisponible/);
   assert.match(monthly, /CONTRIBUTIONS[^\n]*\n- RY\.TO : \+2,00 %\n- AAPL : -4,00 %/); // 50 % × 4 %, 40 % × -10 %
 
   const daily = buildBrief({ period: 'daily', portfolio: PORTFOLIO, profile: null, now: NOW });
@@ -106,6 +106,63 @@ test('period reports use each stock\'s move over the period, never the last sess
     ['Plus faible', '-10,00 %', 'AAPL'],
     ['Région principale', '90,0 %', 'Amérique du Nord'],
   ]);
+});
+
+// ETF portfolio: XEG (100 % energy), ITA (defense, by name), XEQT (broad), and a stock.
+const fund = (o) => ({ type: 'ETF', category: null, family: 'iShares', stockPosition: 1, bondPosition: 0, cashPosition: 0, topHoldings: [], ...o });
+const ETF_PORTFOLIO = {
+  ...PORTFOLIO,
+  summary: { ...PORTFOLIO.summary, totalValue: 1000, investedValue: 1000, cash: 0 },
+  holdings: [
+    holding({ symbol: 'XEQT.TO', name: 'iShares Core Equity ETF Portfolio', sector: null, currency: 'CAD', marketValue: 500, gainPct: 0.1, dayChangePct: 0,
+      fund: fund({ sectorWeights: { Technology: 0.24, 'Financial Services': 0.21, Energy: 0.075, Industrials: 0.115, Healthcare: 0.36 },
+        stockPosition: 0.98, cashPosition: 0.02 }) }),
+    holding({ symbol: 'XEG.TO', name: 'iShares S&P/TSX Capped Energy Index ETF', sector: null, currency: 'CAD', marketValue: 200, gainPct: 0.2, dayChangePct: 0,
+      fund: fund({ sectorWeights: { Energy: 1 }, topHoldings: [{ symbol: 'SU.TO', name: 'Suncor Energy Inc', weight: 0.27 }] }) }),
+    holding({ symbol: 'ITA', name: 'iShares U.S. Aerospace & Defense ETF', sector: null, currency: 'USD', marketValue: 100, gainPct: 0, dayChangePct: 0,
+      fund: fund({ sectorWeights: { Industrials: 1 }, topHoldings: [{ symbol: 'RTX', name: 'RTX Corp', weight: 0.17 }, { symbol: 'GE', name: 'GE Aerospace', weight: 0.2 }] }) }),
+    holding({ symbol: 'ENB.TO', name: 'Enbridge', sector: 'Energy', country: 'Canada', currency: 'CAD', marketValue: 200, gainPct: 0, dayChangePct: 0 }),
+  ],
+};
+const PROFILE = { guardrails: { avoidedSectors: ['energy'], excludedActivities: ['weapons'] } };
+
+test('ETFs are looked through for sectors, not guessed for regions', () => {
+  const ex = exposures(ETF_PORTFOLIO);
+  const sectors = Object.fromEntries(ex.sectors);
+  // Energy: XEG 200 + ENB 200 + XEQT 500 × 0.98 × 0.075 / 1.0 (weights sum to 1) = 436.75 / 1000.
+  assert.equal(sectors['Énergie'].toFixed(4), '0.4368');
+  assert.equal(sectors.Industrie.toFixed(4), (0.1 + 0.5 * 0.98 * 0.115).toFixed(4));
+  assert.equal(sectors['Liquidités et autres (dans les FNB)'].toFixed(2), '0.01');
+  assert.ok(!('Inconnu' in sectors));
+  // XEQT.TO is global: its .TO listing doesn't make it Canadian.
+  assert.deepEqual(issuerCountry(ETF_PORTFOLIO.holdings[0]), { country: null, inferred: false, fund: true });
+  assert.equal(Object.fromEntries(ex.regions)['FNB (répartition géographique non publiée)'], 0.8);
+  assert.deepEqual(ex.funds, ['XEQT.TO', 'XEG.TO', 'ITA']);
+});
+
+test('ETFs heavy in avoided sectors or excluded activities are flagged', () => {
+  const flags = preferenceFlags(ETF_PORTFOLIO, PROFILE);
+  assert.deepEqual(flags.map((f) => [f.symbol, f.reason, f.fundShare.toFixed(3), f.portfolioShare.toFixed(3)]), [
+    ['XEG.TO', 'secteur à éviter : Énergie', '1.000', '0.200'],
+    ['ENB.TO', 'secteur à éviter : Énergie', '1.000', '0.200'],
+    ['ITA', 'activité exclue : armement', '1.000', '0.100'], // by its name
+  ]);
+  // XEQT holds 7,35 % energy: below the 10 % threshold, not flagged.
+  assert.ok(!flags.some((f) => f.symbol === 'XEQT.TO'));
+  assert.deepEqual(preferenceFlags(ETF_PORTFOLIO, null), []);
+
+  // Defense found through the top holdings when the name says nothing.
+  const quiet = { ...ETF_PORTFOLIO, holdings: [{ ...ETF_PORTFOLIO.holdings[2], name: 'Some Industrials ETF' }] };
+  const [f] = preferenceFlags(quiet, PROFILE);
+  assert.equal(f.fundShare.toFixed(2), '0.37'); // RTX 17 % + GE Aerospace 20 %
+  assert.deepEqual(f.holdings.map((x) => x.symbol), ['RTX', 'GE']);
+
+  const brief = buildBrief({ period: 'monthly', portfolio: ETF_PORTFOLIO, profile: null, now: NOW });
+  assert.match(brief, /XEG\.TO ; iShares S&P\/TSX Capped Energy Index ETF ; FNB ; plusieurs/);
+  assert.match(brief, /COMPOSITION DES FNB[^]*XEG\.TO \(iShares S&P\/TSX Capped Energy Index ETF, iShares\) : actions 100,0 %\.\n  - Secteurs : Énergie 100,0 %/);
+
+  const tiles = highlights(analyze({ period: 'monthly', portfolio: ETF_PORTFOLIO, profile: PROFILE }));
+  assert.deepEqual(tiles.at(-1), { label: 'Hors de vos préférences', value: '50,0 %', tone: 'down', detail: 'XEG.TO, ENB.TO, ITA' });
 });
 
 test('every period has a label and title', () => {

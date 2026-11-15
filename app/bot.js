@@ -18,7 +18,10 @@
 //                Son résumé (profileSummary) est ajouté au prompt système ;
 //                profile.guardrails et profile.tensions servent aux contrôles.
 //   - portfolio: le portefeuille du client (voir portfolio.js : summary, holdings, history),
-//                ou null s'il n'a pas encore choisi comment le créer ; pas encore utilisé
+//                ou null s'il n'a pas encore choisi comment le créer. Enrichi avec
+//                la base (secteur, industrie, pays) par portfolio-context.js : un
+//                résumé est ajouté au prompt système, le détail est donné par
+//                l'outil get_portfolio_details.
 // et retourne le texte de la réponse, en Markdown.
 //
 // report() rédige un rapport (quotidien, hebdomadaire, mensuel ou annuel), en
@@ -34,6 +37,7 @@ const { betaRefusalFallbackMiddleware, BetaFallbackState } = require('@anthropic
 const { profileSummary } = require('./profile');
 const research = require('./research');
 const peers = require('./peers');
+const portfolioContext = require('./portfolio-context');
 
 const MODEL = process.env.AGENT_MODEL || 'anthropic.claude-opus-5-5';
 // Claude Opus 5.5 defaults to medium; low keeps chat replies fast.
@@ -49,6 +53,13 @@ Tu connais le profil investisseur du client (ci-dessous) : adapte tes explicatio
 Tu ne donnes pas de conseil financier personnalisé : tu expliques les notions, les options et les risques pour que le client décide lui-même.
 
 Recherche : quand la question porte sur une entreprise précise (résultats trimestriels, chiffres, actualités récentes, perspectives), appelle l'outil research_company avant de répondre, une fois par entreprise. Ne l'appelle pas pour une question générale (une notion, une définition) ni quand la conversation contient déjà l'information. Base les chiffres de ta réponse sur le rapport de recherche, sans en inventer ; si le rapport ne trouve pas une information, dis-le. Si l'outil n'est pas disponible ou échoue, dis que tu n'as pas pu vérifier les données récentes et réponds avec ce que tu sais de façon générale.
+
+Portefeuille du client : son résumé (positions, poids, secteurs, garde-fous) figure ci-dessous et il est à jour.
+- Utilise-le dès que la question touche à ce que le client détient (« mon portefeuille », « mes actions », diversification, exposition, performance). Pour l'industrie, le pays, la devise ou le gain de chaque position, ou le détail des garde-fous, appelle get_portfolio_details.
+- Signale de toi-même un garde-fou dépassé quand c'est pertinent (par exemple un secteur au-dessus de sa limite), avec les chiffres.
+- Pour une proposition d'achat, de vente ou de remplacement, indique l'effet sur le portefeuille (poids des positions et du secteur concerné, nombre de positions).
+- Pour des entreprises similaires, précise celles que le client détient déjà.
+- Les valeurs du portefeuille sont en CAD ; l'historique de performance est fictif (prototype) : ne le présente pas comme réel. Ne cite pas de bouton de source pour les données du portefeuille.
 
 Entreprises similaires : quand le client demande des entreprises similaires, des alternatives, des concurrents ou des comparables à une entreprise (même secteur, même industrie, même pays…) :
 1. appelle d'abord find_similar_companies (filtre de pays si le client le précise) ; ne propose que des entreprises qu'il renvoie, jamais de mémoire ;
@@ -89,7 +100,7 @@ Horizon : un rapport hebdomadaire, mensuel ou annuel porte sur toute la période
 
 Mise en forme : l'interface affiche du Markdown, et les chiffres clés (rendement de la période, meilleur et plus faible titre, région principale) sont déjà affichés en tuiles au-dessus du rapport. Sois concis et visuel :
 - Pas de titre général au début (le titre du rapport est déjà affiché) : commence directement par la première section.
-- Une section par thème, avec un titre de niveau 2 (## Titre), dans cet ordre : ## En bref, ## Performance, ## Titres à surveiller, ## Exposition régionale, ## Exposition sectorielle, ## Actualités, ## Cohérence avec votre profil, ## Points d'attention. Omets une section sans contenu.
+- Une section par thème, avec un titre de niveau 2 (## Titre), dans cet ordre : ## En bref, ## Performance, ## Titres à surveiller, ## Exposition régionale, ## Exposition sectorielle, ## Respect de vos préférences, ## Actualités, ## Cohérence avec votre profil, ## Points d'attention. Omets une section sans contenu.
 - En bref : trois puces au plus, chacune commence par le chiffre ou le fait clé en **gras**, une phrase chacune.
 - Performance : un tableau à deux colonnes (Indicateur | Valeur) avec le rendement de la période, le plus haut et le plus bas (avec leur date) et l'écart avec le plus haut, puis une phrase qui résume l'allure de la période.
 - Titres à surveiller : un tableau (Titre | Variation sur la période | Poids | Contribution) avec les trois plus fortes hausses et les trois plus fortes baisses, puis au plus trois puces de commentaire.
@@ -101,6 +112,9 @@ Mise en forme : l'interface affiche du Markdown, et les chiffres clés (rendemen
 
 Exposition régionale : décris la répartition par pays et région de l'émetteur, et par devise ; signale une forte concentration dans un seul pays ou une seule devise, ainsi que le biais domestique (part du Canada) ou son absence, et rappelle simplement ce que cela implique (risque de change, dépendance à une économie). Compare-la aux régions visées dans le profil (« Régions visées ») : signale une région visée absente du portefeuille, ou une forte exposition à une région non visée.
 Compare la composition du portefeuille aux garde-fous du profil (concentration sectorielle, diversification, liquidités) et signale les écarts.
+
+FNB : un FNB est un panier de titres. L'exposition sectorielle de la fiche décompose déjà les FNB selon leur composition publiée : un FNB peut donc exposer le client à un secteur qu'il ne détient pas directement. Pour chaque FNB, tu peux citer ses principaux secteurs et titres (section « COMPOSITION DES FNB »). Leur répartition géographique n'est pas publiée : dis-le plutôt que de la deviner.
+Respect de vos préférences : la section « CONFLITS AVEC LES PRÉFÉRENCES DU PROFIL » liste les titres et FNB fortement exposés à un secteur que le client veut éviter ou à une activité qu'il exclut. S'il y en a, consacre-leur la section ## Respect de vos préférences avec un tableau (Titre | Motif | Part du FNB | Part du portefeuille), explique en une phrase pourquoi un FNB peut contenir ce secteur sans que le client l'ait choisi, et mentionne-les aussi dans En bref. N'en invente aucun ; s'il n'y en a pas et que le profil a des préférences, dis en une phrase que le portefeuille les respecte.
 Tu ne donnes pas de conseil financier personnalisé ni de recommandation d'achat ou de vente : tu expliques, tu signales et tu proposes des questions à se poser.
 Termine par une ligne en italique rappelant que le rapport est simulé à titre informatif et ne constitue pas un conseil financier.`;
 
@@ -158,6 +172,18 @@ const SIMILAR_TOOL = {
     required: ['company'],
     additionalProperties: false,
   },
+};
+
+const PORTFOLIO_TOOL = {
+  name: 'get_portfolio_details',
+  description:
+    'Full view of the logged-in client\'s portfolio: every position with quantity, value and gain in CAD, weight, ' +
+    'sector, industry and country (from the market database); breakdowns by sector, industry, country and listing ' +
+    'currency; the check of the investor profile\'s guardrails (largest sector, number of assets, crypto share, ' +
+    'excluded activities); fictional performance history. Fast, no parameters. Call it for questions about the ' +
+    'client\'s own portfolio that the summary in the system prompt does not answer (diversification, concentration, ' +
+    'exposure, gains per position, guardrails).',
+  input_schema: { type: 'object', properties: {}, additionalProperties: false },
 };
 
 let client = null;
@@ -224,9 +250,17 @@ function sourceTrail(update) {
 
 // Returns { result, research } where result is the tool_result block and
 // research the successful report (null on error).
-async function runTool(block, progress) {
+async function runTool(block, progress, ctx) {
   const fail = (content) => ({ result: { type: 'tool_result', tool_use_id: block.id, is_error: true, content }, research: null });
   if (block.name === 'find_similar_companies') return runSimilar(block, progress, fail);
+  if (block.name === 'get_portfolio_details') {
+    progress(`portfolio-${block.id}`, 'Lecture de votre portefeuille', 'done',
+      ctx.portfolioView ? `${ctx.portfolioView.summary.positions} position(s)` : 'pas encore créé');
+    const content = ctx.portfolioView
+      ? JSON.stringify(ctx.portfolioView)
+      : 'The client has not created a portfolio yet: invite them to create it in the Portefeuille tab.';
+    return { result: { type: 'tool_result', tool_use_id: block.id, content }, research: null };
+  }
   if (block.name !== 'research_company') return fail(`Unknown tool ${block.name}`);
   const input = validResearchInput(block.input);
   if (!input) return fail('Invalid input: company, question and request_type are required.');
@@ -285,13 +319,13 @@ async function runSimilar(block, progress, fail) {
 
 // Peer review of the reports gathered for a judgment request. The review is
 // appended to the last tool result of the batch.
-async function addPeerReview(results, judgments, progress) {
+async function addPeerReview(results, judgments, progress, portfolioText) {
   const proposal = judgments[0].proposal;
   const label = 'Revue critique des données';
   progress('review', label, 'active', `${judgments.length} rapport(s)`);
   const onTool = sourceTrail((trail) => progress('review', label, 'active', `vérification : ${trail}`));
   try {
-    const { review, tools } = await research.reviewResearch({ proposal, reports: judgments, onTool });
+    const { review, tools } = await research.reviewResearch({ proposal, reports: judgments, portfolio: portfolioText, onTool });
     console.log(`review (${judgments.length} report(s)): ${review.split('\n')[0]} tools=${tools.join(',')}`);
     const verdict = review.match(/VERDICT:\s*(SOLID|PARTIAL|WEAK)/i)?.[1]?.toUpperCase();
     progress('review', label, 'done', verdict ? `fiabilité des données : ${VERDICTS[verdict]}` : 'terminée');
@@ -303,8 +337,18 @@ async function addPeerReview(results, judgments, progress) {
   }
 }
 
-async function reply({ messages, chatId, profile, onProgress }) {
+async function reply({ messages, chatId, profile, portfolio, onProgress }) {
   const progress = makeProgress(onProgress);
+  // The logged-in client's portfolio, enriched with the database (sector,
+  // industry, country, guardrail checks). Loaded once per answer.
+  const portfolioView = await portfolioContext.details({ portfolio, profile }).catch((err) => {
+    console.error('portfolio context error:', err.message);
+    return undefined;
+  });
+  const portfolioText = portfolioView === undefined
+    ? 'Portefeuille du client : indisponible pour le moment (erreur de chargement).'
+    : portfolioContext.summary(portfolioView);
+  const ctx = { portfolioView: portfolioView || null };
   if (!fallbackStates.has(chatId)) fallbackStates.set(chatId, new BetaFallbackState());
 
   // The history must start with a user turn: drop leading assistant messages
@@ -313,6 +357,7 @@ async function reply({ messages, chatId, profile, onProgress }) {
   while (history.length && history[0].role !== 'user') history.shift();
 
   const tools = [
+    PORTFOLIO_TOOL,
     ...(peers.isEnabled() ? [SIMILAR_TOOL] : []),
     ...(research.isEnabled() ? [RESEARCH_TOOL] : []),
   ];
@@ -320,6 +365,7 @@ async function reply({ messages, chatId, profile, onProgress }) {
     // Stable instructions first, then the per-user profile.
     { type: 'text', text: SYSTEM },
     { type: 'text', text: `Profil investisseur du client :\n${profileSummary(profile)}` },
+    { type: 'text', text: portfolioText },
   ];
   if (!research.isEnabled()) {
     system.push({ type: 'text', text: "L'outil research_company n'est pas disponible dans cet environnement." });
@@ -358,13 +404,13 @@ async function reply({ messages, chatId, profile, onProgress }) {
       // return every tool result in a single user message.
       progress('analyse', 'Analyse de la question', 'done');
       history.push({ role: 'assistant', content: response.content });
-      const outcomes = await Promise.all(toolUses.map((block) => runTool(block, progress)));
+      const outcomes = await Promise.all(toolUses.map((block) => runTool(block, progress, ctx)));
       const results = outcomes.map((o) => o.result);
       // Judgment requests only, and one review per answer.
       const judgments = outcomes.map((o) => o.research).filter((r) => r?.kind === 'judgment');
       if (judgments.length && !reviewed && research.isReviewEnabled()) {
         reviewed = true;
-        await addPeerReview(results, judgments, progress);
+        await addPeerReview(results, judgments, progress, portfolioText);
       }
       history.push({ role: 'user', content: results });
       continue;

@@ -62,7 +62,9 @@
     const name = el('td');
     const symbol = el('button', { type: 'button', class: 'symbol', title: `Voir ${h.symbol}` }, h.symbol);
     symbol.addEventListener('click', () => window.StockModal.open(h.symbol));
-    name.append(symbol, el('span', { class: 'name', title: h.name }, h.available ? h.name : 'Cours indisponible'));
+    name.append(symbol);
+    if (h.fund) name.append(el('span', { class: 'tag fund-tag', title: 'Fonds négocié en bourse' }, 'FNB'));
+    name.append(el('span', { class: 'name', title: h.name }, h.available ? h.name : 'Cours indisponible'));
     const edit = el('button', { type: 'button', class: 'icon-btn row-edit', title: 'Modifier la quantité',
       'aria-label': `Modifier la quantité de ${h.symbol}` }, '✎');
     edit.addEventListener('click', () => { holdings.editing = h.symbol; renderHoldings(); });
