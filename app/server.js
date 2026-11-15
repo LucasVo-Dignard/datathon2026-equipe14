@@ -13,6 +13,7 @@ const { createPortfolioStore } = require('./portfolio-store');
 const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
 const { createMacroLookup } = require('./macro');
+const { createNotificationsFromEnv, NotificationError } = require('./notifications');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -52,6 +53,9 @@ const stocks = createStockLookup();
 const macro = createMacroLookup();
 const portfolioStore = createPortfolioStore({ db, saveDb });
 const portfolios = createPortfolioService({ store: portfolioStore, stocks });
+
+// Alertes de prix par courriel (SES) : actives seulement avec Postgres et ALERTS_SENDER.
+const notifications = createNotificationsFromEnv({ pool: profiles.pool });
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -194,7 +198,35 @@ async function handleApi(req, res, pathname) {
         throw err;
       }
       const saved = await profiles.save(user, { answers, result: profile.buildProfile(answers), updatedAt: Date.now() });
+      await notifications.updateThreshold(user, saved.result); // le seuil d'alerte suit le niveau de risque
       return sendJson(res, 200, saved);
+    }
+  }
+
+  if (pathname === '/api/notifications' || pathname === '/api/notifications/test') {
+    try {
+      if (pathname === '/api/notifications/test') {
+        if (method !== 'POST') throw new HttpError(404, 'Route inconnue');
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.sendTest(user, { profile: p?.result }));
+      }
+      if (method === 'GET') {
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.get(user, { profile: p?.result }));
+      }
+      if (method === 'PUT') {
+        const { email } = await readJson(req);
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.subscribe(user, email, { profile: p?.result }));
+      }
+      if (method === 'DELETE') {
+        await notifications.unsubscribe(user);
+        const p = await profiles.get(user);
+        return sendJson(res, 200, await notifications.get(user, { profile: p?.result }));
+      }
+    } catch (err) {
+      if (err instanceof NotificationError) throw new HttpError(err.status, err.message);
+      throw err;
     }
   }
 
@@ -350,6 +382,7 @@ const STATIC = {
   '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
+  '/notifications-ui.js': ['notifications-ui.js', 'text/javascript; charset=utf-8'],
   '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
   '/macro.js': ['macro.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
@@ -375,10 +408,26 @@ function handleStatic(req, res, pathname) {
 
 // ---------------------------------------------------------------------------
 
+// Lien de désabonnement des courriels d'alerte : public (pas de session), le
+// jeton aléatoire du lien fait foi. Toujours la même page, pour ne rien révéler.
+async function handleUnsubscribeLink(req, res, url) {
+  const done = await notifications.unsubscribeWithToken(url.searchParams.get('u'), url.searchParams.get('t'))
+    .catch((err) => { console.error('unsubscribe link error:', err.message); return null; });
+  const message = done === null
+    ? 'Une erreur est survenue. Réessayez plus tard, ou désabonnez-vous depuis la page « Mon profil » de l’application.'
+    : 'Vous ne recevrez plus d’alertes de prix par courriel. Vous pouvez vous réabonner à tout moment depuis la page « Mon profil » de l’application.';
+  res.writeHead(done === null ? 500 : 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Désabonnement</title><link rel="stylesheet" href="/style.css"></head>
+<body><main class="login"><div class="login-card"><h1>Désabonnement</h1><p>${message}</p><a href="/">Retour à l’application</a></div></main></body></html>`);
+}
+
 const server = http.createServer(async (req, res) => {
-  const { pathname } = new URL(req.url, 'http://localhost');
+  const url = new URL(req.url, 'http://localhost');
+  const { pathname } = url;
   try {
     if (pathname.startsWith('/api/')) await handleApi(req, res, pathname);
+    else if (pathname === '/desabonnement' && req.method === 'GET') await handleUnsubscribeLink(req, res, url);
     else handleStatic(req, res, pathname);
   } catch (err) {
     if (!(err instanceof HttpError)) console.error(err);
@@ -389,7 +438,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 Promise.all([profiles.init(), portfolioStore.init()]).then(
-  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind})`)),
+  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
   (err) => {
     console.error(`Impossible d'initialiser le stockage (${profiles.kind}) :`, err.message || err.code || err);
     process.exit(1);

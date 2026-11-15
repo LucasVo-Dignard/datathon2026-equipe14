@@ -96,3 +96,14 @@ API (logged-in user): `GET /api/portfolio` (`null` until the user has chosen),
 Storage works like profiles: with `DATABASE_URL`, tables `portfolios` and
 `portfolio_holdings` (migration `V7__create_portfolios.sql`, the server refuses to
 start without it). Otherwise `db.users[username].portfolio` in the JSON file.
+
+## Price alerts by email
+
+`notifications.js` (API `/api/notifications`, card on the profile page) and the
+daily job `src/marketdata/jobs/price-alerts.js` (run after `daily-refresh.js`)
+email users when a stock **in their portfolio** moves by their threshold or more
+in one trading day. The threshold follows the risk level (2 % Faible … 7 % Élevé,
+4 % without a profile). Thresholds and the email format are shared in
+`src/marketdata/alerts.js`. Sent with Amazon SES (see `infra/README.md`); tables
+`notification_subscriptions` and `price_alerts_sent` (migration V8). Needs
+Postgres and `ALERTS_SENDER`, otherwise the card says alerts are unavailable.

@@ -7,10 +7,15 @@ metrics, price targets, analyst rating actions, recent prices and, if
 a Finnhub key is configured, news, earnings and recommendations. Symbols
 that aren't tracked are still loaded on demand by the app.
 
-> **Currently disabled.** `refresh_enabled` defaults to `false`: the job
-> starts, logs `REFRESH_ENABLED is off: doing nothing` and exits 0, without
-> touching the database or any provider. Set `refresh_enabled = true` in
-> `terraform.tfvars` and apply to turn it on.
+> **On in prod, off in dev environments.** `refresh_enabled` defaults to
+> `true` in prod and `false` elsewhere: when off, the job starts, logs
+> `REFRESH_ENABLED is off: doing nothing` and exits 0, without touching the
+> database or any provider. Override with `-var refresh_enabled=...`.
+>
+> Order of a run: the price-alert subscribers' holdings are refreshed first,
+> then the alerts are emailed (`price-alerts.js`), then the other tracked
+> symbols. With ~1 000 tracked symbols (top companies) at 30 Yahoo calls/min,
+> a full run takes about 2 h 15, so alerts never wait for it.
 
 It creates:
 
@@ -18,7 +23,8 @@ It creates:
   image (`ecr.tf`, same setup as the app's in `../infra/ecr.tf`: scan on
   push, keeps 10 images)
 - an **AWS Batch** Fargate compute environment (max 1 vCPU), job queue and
-  job definition (0.25 vCPU, 1 GiB, 30 min timeout, 1 retry)
+  job definition (0.25 vCPU, 1 GiB, 1 retry; timeout 4 h in prod, 30 min in
+  dev, `job_timeout_seconds`)
 - an **EventBridge Scheduler** schedule: weekdays 18:00 `America/Toronto`
   (prod only by default; paused in developer environments)
 - a **security group** for the job, plus one ingress rule on the DB security

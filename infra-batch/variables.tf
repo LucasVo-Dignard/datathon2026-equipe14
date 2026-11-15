@@ -17,9 +17,9 @@ variable "image_tag" {
 }
 
 variable "refresh_enabled" {
-  description = "When false, the job starts and exits immediately without fetching or writing anything (REFRESH_ENABLED=false)."
+  description = "When false, the job starts and exits immediately without fetching or writing anything (REFRESH_ENABLED=false). Default: on in prod, off in dev environments."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "schedule_enabled" {
@@ -53,9 +53,9 @@ variable "job_memory_mib" {
 }
 
 variable "job_timeout_seconds" {
-  description = "Batch stops a run that takes longer than this."
+  description = "Batch stops a run that takes longer than this. Default: 4 h in prod (~1 000 tracked symbols at 30 Yahoo calls/min take about 2 h 15), 30 min in dev."
   type        = number
-  default     = 1800
+  default     = null
 }
 
 variable "log_retention_days" {

@@ -109,3 +109,26 @@ instance is **not** recreated, so the prototype data in `/var/lib/chatbot`
 
 Changing `user_data.sh.tftpl` or `app_image_tag` still recreates the instance
 (same Elastic IP, data in `/var/lib/chatbot` reset).
+
+## Price alerts by email (SES)
+
+`ses.tf` sends the price-move alerts with Amazon SES, from the team mailbox:
+`datathon2026.equipe14@gmail.com` in prod, `datathon2026.equipe14+<env>@gmail.com`
+in the dev environments (one SES identity per environment, one inbox).
+
+- After the first apply in an environment, SES emails a verification link to
+  that address: someone with access to the team mailbox clicks it once, or
+  nothing is sent. Check with
+  `aws sesv2 get-email-identity --email-identity <address>`.
+- Then apply `../infra-batch` (it reads the sender from SSM
+  `/<prefix>/alerts/sender`), apply migration V8 and redeploy the app and the job.
+- **SES sandbox**: while the account has no production access, SES only sends
+  to verified addresses. The app handles it: on subscription it asks SES to
+  verify the recipient (one click, AWS email). Once production access is
+  granted (SES console, "Request production access"), recipients are active
+  right away.
+- Every email has a one-click unsubscribe link (`/desabonnement`, no login)
+  and a `List-Unsubscribe` header. Bounces and complaints go to the SES
+  suppression list (configuration set `<prefix>-alerts`, TLS required).
+- `-var alerts_enabled=false` turns alerts off; `-var alerts_sender_email=...`
+  overrides the sender.

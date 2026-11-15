@@ -41,6 +41,7 @@ function createPgStore({ connectionString }) {
 
   return {
     kind: 'postgres',
+    pool, // partagé avec les alertes (notifications.js)
     // Le schéma appartient à Flyway (db/migrations) : on vérifie seulement que la table existe.
     async init() {
       const { rows } = await pool.query("SELECT to_regclass('investor_profiles') AS t");

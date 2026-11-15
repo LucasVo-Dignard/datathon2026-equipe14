@@ -58,6 +58,24 @@ data "aws_iam_policy_document" "job" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [local.db_secret_arn]
   }
+
+  # Send the price alerts, from the alerts address only (see ../infra/ses.tf).
+  dynamic "statement" {
+    for_each = local.alerts_sender != "" ? [1] : []
+    content {
+      sid     = "SendPriceAlerts"
+      actions = ["ses:SendEmail"]
+      resources = [
+        "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/*",
+        "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:configuration-set/${local.alerts_configuration_set}",
+      ]
+      condition {
+        test     = "StringEquals"
+        variable = "ses:FromAddress"
+        values   = [local.alerts_sender]
+      }
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "job" {

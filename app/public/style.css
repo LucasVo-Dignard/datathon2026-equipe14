@@ -327,6 +327,15 @@ h1, h2, h3 { margin: 0; }
 .match { display: grid; grid-template-columns: 70px 1fr 48px; align-items: center; gap: 8px; margin-top: 6px; }
 .bar { height: 8px; background: var(--hover); border-radius: 4px; overflow: hidden; }
 .bar div { height: 100%; background: var(--accent); }
+.notif .amount { margin: 0; flex: 1; min-width: 200px; }
+.notif-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+.notif-status { padding: 8px 12px; border-radius: 6px; border-left: 3px solid; }
+.notif-status.ok { border-color: var(--up); background: #eaf5ea; }
+.notif-status.pending { border-color: #c2410c; background: #fdf0e8; }
+.notif-msg { min-height: 1.2em; margin: 4px 0 0; font-size: 0.9rem; }
+.notif-msg.ok { color: var(--up); }
+.notif-msg.error { color: var(--down); }
+.notif button:disabled { opacity: 0.6; cursor: default; }
 .disclaimer { margin-top: 32px; font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; }
 @media (max-width: 480px) {
   .prefs { grid-template-columns: 1fr; gap: 2px; }

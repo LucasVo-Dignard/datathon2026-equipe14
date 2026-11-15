@@ -32,3 +32,8 @@ output "ecr_repository_url" {
   description = "ECR repository of the app image (pushed by ../scripts/deploy-app.sh)."
   value       = aws_ecr_repository.app.repository_url
 }
+
+output "alerts_sender_email" {
+  description = "Sender of the price alerts (SES identity, see ses.tf), or null if alerts are disabled."
+  value       = local.alerts_enabled ? local.alerts_sender : null
+}
