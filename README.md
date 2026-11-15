@@ -1,4 +1,4 @@
-# AlphaForge AI : équipe 14 (Datathon 2026)
+# COURTIAGE DIRECT : équipe 14 (Datathon 2026)
 
 Outil d'information pour les clients de Banque Nationale Courtage Direct qui ont
 peu de temps ou peu de connaissances en placement. Il comprend :
@@ -28,8 +28,6 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | Onglet ou fonction | Ce qu'elle fait | Code |
 | --- | --- | --- |
 | **Mon profil** | 17 questions, ou un persona du cas (Amira, Mateo, Robert). Le niveau de risque est le plus prudent entre la tolérance et la capacité, plafonné par l'objectif. Le résultat est expliqué : facteurs, tensions entre les réponses, garde-fous pour l'agent, persona le plus proche | `app/profile.js` |
-| **Portefeuille** | Portefeuille simulé (aléatoire ou composé à la main), valorisé avec les derniers cours en CAD. Il affiche les actualités réelles des titres détenus, puis l'actualité utile aux investisseurs | `app/portfolio.js`, `app/news.js` |
-| **Macro** | Indicateurs de la Banque mondiale, avec la provenance de chaque valeur | `app/macro.js` |
 | **Rapports** | Rapports quotidiens, hebdomadaires, mensuels et annuels, rédigés par l'agent à partir des données | `app/reports.js` |
 | **Assistant** | Agent Claude (Bedrock) qui connaît le profil et le portefeuille. Il fait des recherches avec AgentCore (base de connaissances, Bigdata.com, recherche web) et fait relire ses jugements par un second agent | `app/bot.js`, `agents/` |
 | **Alertes de prix** | Un courriel (Amazon SES) quand un titre détenu varie de 2 à 7 % ou plus dans la journée, selon le niveau de risque. Jamais deux fois la même alerte, et désabonnement en un clic | `app/notifications.js`, `src/marketdata/jobs/price-alerts.js` |
