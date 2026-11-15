@@ -8,7 +8,7 @@ const { parseRss, cleanText, httpUrl } = require('../src/marketdata/news/rss');
 const { createMatcher, normalizeName } = require('../src/marketdata/news/match');
 const { analyze, docText } = require('../src/marketdata/news/enrich');
 const newsJob = require('../src/marketdata/jobs/news-refresh');
-const { createNewsService } = require('../app/news');
+const { createNewsService, generalRelevance } = require('../app/news');
 
 const rss = (items) => `<?xml version="1.0"?><rss version="2.0"><channel><title>Feed</title>${items}</channel></rss>`;
 const item = ({ title, link, date = 'Sat, 14 Nov 2026 07:11:29 EST', desc = '', guid }) => `<item>
@@ -151,6 +151,7 @@ test('news-refresh job: feeds + Yahoo -> enriched, linked, deduplicated; app que
   const fetchFn = fakeFetch({
     'https://feed/cbc': rss(item({ title: 'RBC beats estimates', link: 'https://cbc.ca/rbc', date: recent, desc: 'Royal Bank results' })
       + item({ title: 'Minimum wage report', link: 'https://cbc.ca/wage', date: recent })
+      + item({ title: 'Bank of Canada holds its key interest rate', link: 'https://cbc.ca/boc', date: recent })
       + item({ title: 'Too old', link: 'https://cbc.ca/old', date: old })),
     'https://feed/rc': rss(item({ title: 'Mises à pied chez un détaillant', link: 'https://ici.radio-canada.ca/1', date: recent, desc: 'Résumé en français' })),
   });
@@ -171,7 +172,8 @@ test('news-refresh job: feeds + Yahoo -> enriched, linked, deduplicated; app que
             (SELECT json_agg(json_build_object('s', symbol, 'r', reason) ORDER BY symbol) FROM news_item_symbols WHERE news_id = id) AS links
        FROM news_items WHERE source LIKE 'test-%' OR source = 'yahoo' ORDER BY title`);
   const byTitle = Object.fromEntries(rows.map((r) => [r.title, r]));
-  assert.deepEqual(Object.keys(byTitle).sort(), ['Microsoft and Nvidia expand AI deal', 'Minimum wage report', 'Mises à pied chez un détaillant', 'RBC beats estimates']);
+  assert.deepEqual(Object.keys(byTitle).sort(), ['Bank of Canada holds its key interest rate', 'Microsoft and Nvidia expand AI deal',
+    'Minimum wage report', 'Mises à pied chez un détaillant', 'RBC beats estimates']);
   assert.ok(rows.every((r) => r.enriched), 'all enriched by Comprehend');
   assert.equal(byTitle['RBC beats estimates'].sentiment, 'POSITIVE');
   assert.deepEqual(byTitle['RBC beats estimates'].links, [{ s: 'RY.TO', r: 'comprehend:RBC' }]);
@@ -185,14 +187,18 @@ test('news-refresh job: feeds + Yahoo -> enriched, linked, deduplicated; app que
   const c2 = fakeComprehend();
   assert.equal(await newsJob.main([], { env, log: quietLog, feeds, fetchFn, yahoo, comprehend: c2, now }), 0);
   assert.equal(c2.calls.length, 0);
-  assert.equal((await pool.query("SELECT count(*)::int AS n FROM news_items WHERE source LIKE 'test-%' OR source = 'yahoo'")).rows[0].n, 4);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM news_items WHERE source LIKE 'test-%' OR source = 'yahoo'")).rows[0].n, 5);
 
-  // App: linked articles first (with reasons), then general news; original language.
+  // App: linked articles first (with reasons), then only general news relevant to investors.
   const news = createNewsService({ pool });
   const items = await news.forHoldings([{ symbol: 'RY.TO', sector: 'Finance' }, { symbol: 'MSFT', sector: 'Technologie' }]);
   const titles = items.map((i) => i.title);
   assert.deepEqual(titles.slice(0, 2).sort(), ['Microsoft and Nvidia expand AI deal', 'RBC beats estimates']);
-  assert.ok(titles.indexOf('Minimum wage report') > 1 && titles.includes('Mises à pied chez un détaillant'));
+  assert.equal(titles[2], 'Bank of Canada holds its key interest rate', 'market theme: kept after the linked articles');
+  assert.match(items[2].relevance, /taux d’intérêt/);
+  assert.equal(items[0].relevance, null, 'linked articles need no general-news reason');
+  assert.ok(!titles.includes('Minimum wage report'), 'no listed company, no market theme: left out');
+  assert.ok(!titles.includes('Mises à pied chez un détaillant'), 'unlisted company only: left out');
   const rbc = items.find((i) => i.title === 'RBC beats estimates');
   assert.equal(rbc.sector, 'Finance');
   assert.deepEqual(rbc.links, [{ symbol: 'RY.TO', reason: 'comprehend:RBC' }]);
@@ -200,9 +206,7 @@ test('news-refresh job: feeds + Yahoo -> enriched, linked, deduplicated; app que
   assert.equal(rbc.url, 'https://cbc.ca/rbc');
   const msft = items.find((i) => i.title.startsWith('Microsoft'));
   assert.deepEqual(msft.symbols, ['MSFT'], 'only the user\'s own symbols are shown');
-  const general = items.find((i) => i.title === 'Mises à pied chez un détaillant');
-  assert.equal(general.sector, 'Marché');
-  assert.equal(general.summary, 'Résumé en français');
+  assert.equal(items[2].sector, 'Marché');
   assert.ok(!items.some((i) => i.title === 'Too old'));
 }));
 
@@ -226,3 +230,22 @@ test('news job is a no-op when disabled, and fails only if nothing worked', need
     await c.end();
   }
 });
+
+test('general news relevance: listed companies (more in the user\'s sectors), then market themes', () => {
+  const sectors = new Set(['Technology']);
+  const rel = (title, companies = [], summary = '') => generalRelevance({ title, summary, companies }, sectors);
+  assert.equal(rel('Le Salon des artisans de Noël réunit une dizaine d’exposants'), null);
+  assert.equal(rel('Minimum wage has not kept pace with the cost of living'), null);
+  assert.match(rel('La Banque du Canada maintient son taux directeur').reason, /taux d’intérêt, banques centrales/);
+  assert.match(rel('TSX closes higher as oil prices climb').reason, /bourse, énergie/);
+  const own = rel('Outage', [{ symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Technology' }]);
+  const other = rel('Outage', [{ symbol: 'XOM', name: 'Exxon Mobil', sector: 'Energy' }]);
+  assert.ok(own.score > other.score);
+  assert.match(own.reason, /secteur de vos titres/);
+  assert.match(other.reason, /société cotée : Exxon Mobil/);
+  assert.equal(rel('Les actionnaires de la coopérative', [], 'stockholders'), null, 'whole words only');
+  assert.equal(rel('Une année record à l’Expo-Cadeaux des artisans', [], 'Les profits de l’événement serviront'), null,
+    '"profits" of a local fair is not a market theme');
+  assert.match(rel('RBC quarterly profit tops forecasts').reason, /résultats d’entreprises/);
+});
+
