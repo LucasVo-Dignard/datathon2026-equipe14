@@ -134,7 +134,7 @@ A holding can be an ETF (or a mutual fund): add it like a stock (`XEQT.TO`, `QQQ
 Its composition comes from the same Yahoo quote summary as the profile (modules
 `quoteType`, `fundProfile`, `topHoldings`): sector weights, top holdings, and the
 stock / bond / cash split. `stocks.fund(symbol)` returns it (null for a stock); with
-`DATABASE_URL` it is stored in `fund_compositions` (migration V10, one row per
+`DATABASE_URL` it is stored in `fund_compositions` (migration V11, one row per
 looked-up symbol, funds or not) and fetched again after a week; the daily refresh
 also saves it (step `yahoo.fund_composition`). Without the table it asks Yahoo and
 saves nothing.

@@ -9,8 +9,11 @@
 -- Ratios are fractions (0.25 = 25 %). sector_weights: { "Technology": 0.24, ... },
 -- with the same sector names as company_profiles.sector. top_holdings:
 -- [{ "symbol": "AAPL", "name": "Apple Inc", "weight": 0.08 }], largest first.
+--
+-- IF NOT EXISTS: the lucas environment got this table from an earlier draft
+-- numbered V10 (the number went to V10__create_news_feed.sql).
 
-CREATE TABLE fund_compositions (
+CREATE TABLE IF NOT EXISTS fund_compositions (
     symbol          text          NOT NULL,
     provider        text          NOT NULL,
     quote_type      text          NOT NULL,

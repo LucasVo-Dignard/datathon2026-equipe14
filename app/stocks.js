@@ -168,7 +168,7 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     try {
       cached = await repo.fundComposition(pool, symbol);
     } catch (err) {
-      // Table missing (migration V10 not applied yet): ask Yahoo, save nothing.
+      // Table missing (migration V11 not applied yet): ask Yahoo, save nothing.
       log.error(`fund composition read error (${symbol}):`, err.message);
       return asFund(await funds.fetch(symbol));
     }
