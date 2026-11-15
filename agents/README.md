@@ -97,19 +97,22 @@ Not managed by Terraform yet. All names start with `datathon2026-equipe14-andre`
 | IAM roles | `datathon2026-equipe14-kb`, `-gateway`, `-harness` |
 | Bigdata.com key | Secrets Manager `datathon2026-equipe14/bigdata-api-key`, credential provider `datathon2026-equipe14-bigdata` (same Bigdata.com account as andre) |
 
-On the prod EC2 the variables below are in `/etc/chatbot.env` (set through SSM,
-next to the alert settings), with `BIGDATA_DAILY_CALLS=9`.
+On the prod EC2, `BIGDATA_DAILY_CALLS=9` is in `/etc/chatbot.env` (set through SSM,
+next to the alert settings).
 
 The app reads its configuration from environment variables: `RESEARCH_HARNESS_ARN`,
 `RESEARCH_REVIEWER_ARN` (peer review; unset = no review),
 `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` (where to save
 reports), `RESEARCH_GATEWAY_URL` (the gateway's MCP URL, for the daily market
-snapshot: `aws bedrock-agentcore-control get-gateway --gateway-identifier <id>
---query gatewayUrl`) and `BIGDATA_DAILY_CALLS` (budget, default 9):
+snapshot) and `BIGDATA_DAILY_CALLS` (budget, default 9):
 
 - locally: in `.env-dev` (gitignored), loaded by `npm run dev`;
-- on the EC2: in `/etc/chatbot.env` (set by hand through SSM; lost if the
-  instance is replaced, then set it again).
+- on the EC2: `scripts/deploy-app.sh` finds the `RESEARCH_*` values by name
+  (resources named after the environment prefix, as in the tables above) and
+  rewrites them in `/etc/chatbot.env` on every deploy, so a replaced instance
+  gets them back at its next deploy. An environment without a research harness
+  gets none, and runs without research. `BIGDATA_DAILY_CALLS` is not managed by
+  the script: set it by hand through SSM to change the default.
 
 Without it, the agent still answers, without research.
 
