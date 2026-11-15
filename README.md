@@ -168,9 +168,20 @@ sauf le modèle `.env-dev.example`. Dans les dossiers `infra*/`, `*.tfvars`,
 | `.env-aws` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_DEFAULT_REGION=us-east-1` (jeton temporaire, à renouveler) |
 | `.env-dev` | `TF_WORKSPACE=<ton nom>`, qui choisit ton environnement pour Terraform, les migrations et les scripts (copie de `.env-dev.example`) |
 
+Linux et macOS (bash ou zsh) :
+
 ```bash
 set -a; source .env-aws; source .env-dev; set +a
 ```
+
+Windows (invite de commandes `cmd`) :
+
+```bat
+for %f in (.env-aws .env-dev) do @for /f "usebackq eol=# tokens=1,* delims==" %a in ("%f") do @set "%a=%b"
+```
+
+Les variables ne valent que pour le terminal ouvert : relance la commande dans chaque
+nouveau terminal, et après avoir renouvelé `.env-aws`.
 
 **Environnements.** Chaque développeur a le sien (VPC, EC2, RDS, jobs), en plus de la
 prod, dans le même compte AWS. `TF_WORKSPACE` le choisit pour Terraform,
