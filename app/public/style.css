@@ -193,6 +193,11 @@ body.resizing iframe, body.resizing .chart { pointer-events: none; }
 .news-item h3 { font-size: 0.95rem; font-weight: 600; margin: 6px 0 4px; line-height: 1.35; }
 .news-item p { margin: 0 0 6px; color: var(--text-2); font-size: 0.9rem; line-height: 1.45; }
 .news-item .meta { color: var(--muted); font-size: 0.8rem; }
+.news-item h3 a { color: inherit; text-decoration: none; }
+.news-item h3 a:hover { text-decoration: underline; }
+.tag.sentiment.pos { color: var(--up); }
+.tag.sentiment.neg { color: var(--down); }
+.tag.lang { font-weight: 600; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag {
   font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;

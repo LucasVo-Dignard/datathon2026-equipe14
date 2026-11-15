@@ -169,3 +169,23 @@ test('every period has a label and title', () => {
   assert.deepEqual(Object.keys(PERIODS), ['daily', 'weekly', 'monthly', 'yearly']);
   for (const p of Object.values(PERIODS)) assert.ok(p.label && p.title && p.days);
 });
+
+test('real news ({ real, items } from app/news.js): full tickers, no summary, source and tone', () => {
+  const portfolio = {
+    ...PORTFOLIO,
+    news: {
+      real: true,
+      items: [
+        { publishedAt: new Date(NOW - 3600e3).toISOString(), sector: 'Finance', symbols: ['RY.TO'], source: 'CBC Business',
+          title: 'RBC beats estimates', summary: null, sentiment: 'POSITIVE' },
+        { publishedAt: new Date(NOW - 3600e3).toISOString(), sector: 'Marché', symbols: [], source: 'MarketWatch',
+          title: 'Unrelated market story', summary: 'x' },
+      ],
+    },
+  };
+  const brief = buildBrief({ period: 'weekly', portfolio, profile: null, now: NOW });
+  assert.match(brief, /ACTUALITÉS DE LA PÉRIODE \(médias et Yahoo Finance/);
+  assert.match(brief, /CBC Business ; ton positif ; RBC beats estimates\n/);
+  assert.doesNotMatch(brief, /Unrelated market story/);
+  assert.doesNotMatch(brief, /fictives/);
+});

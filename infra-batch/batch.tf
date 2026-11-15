@@ -116,3 +116,33 @@ resource "aws_scheduler_schedule" "daily_refresh" {
     }
   }
 }
+
+# Real news for the dashboard every 2 hours (src/marketdata/jobs/news-refresh.js):
+# same image and job definition, another command. A run takes a few minutes
+# (4 RSS feeds, Yahoo news for the held symbols, Amazon Comprehend).
+resource "aws_scheduler_schedule" "news_refresh" {
+  name                         = "${local.prefix}-news-refresh"
+  schedule_expression          = var.news_schedule_expression
+  schedule_expression_timezone = var.schedule_timezone
+  state                        = local.schedule_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:batch:submitJob"
+    role_arn = aws_iam_role.scheduler.arn
+    input = jsonencode({
+      JobName            = "news-refresh"
+      JobQueue           = aws_batch_job_queue.main.arn
+      JobDefinition      = aws_batch_job_definition.daily_refresh.arn
+      ContainerOverrides = { Command = ["src/marketdata/jobs/news-refresh.js"] }
+    })
+
+    retry_policy {
+      maximum_retry_attempts = 1
+    }
+  }
+}
+

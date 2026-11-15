@@ -413,11 +413,19 @@ function buildBrief({ period, portfolio, profile, changes = {}, now = Date.now()
   const cutoff = now - Math.max(p.days, 1) * 24 * 3600e3;
   const symbols = new Set(portfolio.holdings.map((h) => h.symbol.split('.')[0]));
   const ownSectors = new Set(ex.sectors.map(([sector]) => sector));
-  const news = (portfolio.news || []).filter((n) => Date.parse(n.publishedAt) >= cutoff
-    && (n.symbols.some((sym) => symbols.has(sym)) || ownSectors.has(n.sector)));
-  lines.push('', '## ACTUALITÉS DE LA PÉRIODE (fictives, prototype)');
+  // portfolio.news: { real, items } (app/news.js: real news, or the samples without a database).
+  const newsBlock = Array.isArray(portfolio.news) ? { real: false, items: portfolio.news } : (portfolio.news || { items: [] });
+  const news = (newsBlock.items || []).filter((n) => Date.parse(n.publishedAt) >= cutoff
+    && (n.symbols.some((sym) => symbols.has(sym.split('.')[0])) || ownSectors.has(n.sector)));
+  lines.push('', newsBlock.real
+    ? '## ACTUALITÉS DE LA PÉRIODE (médias et Yahoo Finance, langue d\'origine ; ton détecté par Amazon Comprehend)'
+    : '## ACTUALITÉS DE LA PÉRIODE (fictives, prototype)');
   if (!news.length) lines.push('- Aucune actualité liée au portefeuille sur la période.');
-  for (const n of news) lines.push(`- ${formatDate(n.publishedAt)} ; ${n.source} ; ${n.title} : ${n.summary}`);
+  for (const n of news) {
+    const TONES = { POSITIVE: 'positif', NEGATIVE: 'négatif', NEUTRAL: 'neutre', MIXED: 'mitigé' };
+    const tone = TONES[n.sentiment] ? ` ; ton ${TONES[n.sentiment]}` : '';
+    lines.push(`- ${formatDate(n.publishedAt)} ; ${n.source}${tone} ; ${n.title}${n.summary ? ` : ${n.summary}` : ''}`);
+  }
 
   lines.push('', '## PROFIL INVESTISSEUR', profileSummary(profile));
   return lines.join('\n');

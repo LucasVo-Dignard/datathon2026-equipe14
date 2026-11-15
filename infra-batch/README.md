@@ -26,6 +26,10 @@ It creates:
   job definition (0.25 vCPU, 1 GiB, 1 retry; timeout 4 h in prod, 30 min in
   dev, `job_timeout_seconds`)
 - an **EventBridge Scheduler** schedule: weekdays 18:00 `America/Toronto`
+- a second schedule, **news refresh**, every 2 hours from 7:00 to 23:00
+  `America/Toronto` (`news_schedule_expression`): same job definition, command
+  `src/marketdata/jobs/news-refresh.js`; the job role may call Amazon
+  Comprehend's batch detect APIs (sentiment, entities)
   (prod only by default; paused in developer environments)
 - a **security group** for the job, plus one ingress rule on the DB security
   group that allows it
