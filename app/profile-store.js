@@ -46,7 +46,7 @@ function createPgStore({ connectionString }) {
     async init() {
       const { rows } = await pool.query("SELECT to_regclass('investor_profiles') AS t");
       if (!rows[0].t) {
-        throw new Error('table investor_profiles absente : appliquez les migrations Flyway (voir db/README.md)');
+        throw new Error('table investor_profiles absente : appliquez les migrations Flyway (voir README.md)');
       }
     },
     async get(username) {

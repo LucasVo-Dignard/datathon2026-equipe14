@@ -7,7 +7,7 @@ Exhibit 99.1), converts it to text and writes, under OUT_DIR:
 The metadata (symbol, company, period, filing date, source URL) lets the
 research agent filter the knowledge base by stock symbol.
 
-Usage: python3 -I build_earnings_docs.py OUT_DIR   (then see agents/README.md)
+Usage: python3 -I build_earnings_docs.py OUT_DIR   (then sync OUT_DIR to the knowledge base bucket and start an ingestion job)
 Add a company: append a line to DOCS with the Exhibit 99.1 URL of its latest
 earnings 8-K (EDGAR filing index of the company). Each entry is a tuple
 (symbol without exchange suffix, company name, filing date YYYY-MM-DD,

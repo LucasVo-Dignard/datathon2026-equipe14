@@ -23,7 +23,7 @@ terraform {
 
 # Credentials and region come from the standard AWS_* environment variables
 # (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN,
-# AWS_DEFAULT_REGION). Load them from ../.env-aws -- see README.md.
+# AWS_DEFAULT_REGION). Load them from ../.env-aws -- see ../README.md.
 provider "aws" {
   region = var.region
 

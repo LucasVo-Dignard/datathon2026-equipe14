@@ -2,7 +2,7 @@
 # IAM role of the web server.
 #
 # SSM lets us run commands on the instance (e.g. database migrations, see
-# ../db/README.md) without opening SSH: the SSM agent connects out to AWS,
+# ../db/migrate.py) without opening SSH: the SSM agent connects out to AWS,
 # so no inbound rule is needed.
 #
 # Stack-specific permissions are attached by the stacks that own the
@@ -52,7 +52,7 @@ resource "aws_iam_role_policy" "web_bedrock" {
 }
 
 # The app's agent calls this environment's AgentCore research and reviewer
-# harnesses (app/research.js), created with the AWS CLI (see ../agents/README.md).
+# harnesses (app/research.js), created by ../infra-agents.
 # Their names follow the environment prefix: <prefix with "_">_research-<suffix>
 # and <prefix with "_">_reviewer-<suffix>.
 resource "aws_iam_role_policy" "web_research_harness" {
@@ -74,7 +74,7 @@ resource "aws_iam_role_policy" "web_research_harness" {
 
 # The app fetches the Bigdata.com market tearsheet once a day through the
 # research gateway (app/research.js), and shares it between researches.
-# The gateway is created by the AWS CLI, its name follows the environment
+# The gateway is created by ../infra-agents, its name follows the environment
 # prefix: <prefix>-research-<suffix>.
 resource "aws_iam_role_policy" "web_research_gateway" {
   name = "invoke-research-gateway"
@@ -92,8 +92,8 @@ resource "aws_iam_role_policy" "web_research_gateway" {
 
 # The research agent saves the reports that used Bigdata.com to the earnings
 # knowledge base (app/research.js), so the same question costs no credits
-# next time. Bucket and knowledge base are created by the AWS CLI, see
-# ../agents/README.md; the bucket name follows the environment prefix.
+# next time. Bucket and knowledge base are created by ../infra-agents;
+# the bucket name follows the environment prefix.
 resource "aws_iam_role_policy" "web_research_kb_write" {
   name = "save-research-reports"
   role = aws_iam_role.web.id

@@ -57,7 +57,7 @@ function createPgStore({ connectionString }) {
       const { rows } = await pool.query(
         "SELECT to_regclass('portfolios') AS p, to_regclass('portfolio_holdings') AS h");
       if (!rows[0].p || !rows[0].h) {
-        throw new Error('tables portfolios / portfolio_holdings absentes : appliquez les migrations Flyway (voir db/README.md)');
+        throw new Error('tables portfolios / portfolio_holdings absentes : appliquez les migrations Flyway (voir README.md)');
       }
     },
     async get(username) {

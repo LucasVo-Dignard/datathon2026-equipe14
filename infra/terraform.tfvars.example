@@ -1,5 +1,5 @@
 # Example overrides. Don't copy this to terraform.tfvars: Terraform loads that
-# file in every workspace, prod included (see ../ENVIRONMENTS.md). Pass values
+# file in every workspace, prod included (see ../infra/env.tf). Pass values
 # with -var, or copy to <name>.tfvars (gitignored) and pass -var-file=<name>.tfvars.
 
 # In dev environments the IP of the machine running terraform is allowed

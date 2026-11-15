@@ -30,8 +30,8 @@ if [ -n "$(git status --porcelain -- app src package.json package-lock.json Dock
   TAG="$TAG-dirty"
 fi
 
-# Research agent settings (app/research.js). Its resources are created with
-# the AWS CLI (see ../agents/README.md), not by Terraform, and are named after
+# Research agent settings (app/research.js). Its resources are created by
+# ../infra-agents (prod only for now, older ones with the AWS CLI) and named after
 # the environment prefix: they are looked up by name here and rewritten in
 # /etc/chatbot.env on every deploy, so a replaced instance gets them back.
 # An environment without a research harness runs without research.

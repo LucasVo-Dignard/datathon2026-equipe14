@@ -87,7 +87,7 @@ function createPgStore({ connectionString }) {
       const { rows } = await pool.query(
         "SELECT to_regclass('chats') AS chats, to_regclass('chat_messages') AS messages");
       if (!rows[0].chats || !rows[0].messages) {
-        throw new Error('tables chats / chat_messages absentes : appliquez les migrations Flyway (voir db/README.md)');
+        throw new Error('tables chats / chat_messages absentes : appliquez les migrations Flyway (voir README.md)');
       }
     },
     async list(owner) {
