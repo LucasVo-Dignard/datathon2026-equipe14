@@ -43,13 +43,14 @@ function shuffled(items) {
   return a;
 }
 
-function toQuote({ symbol, name, exchange, currency, sector, price, prevClose, asOf, provider }) {
+function toQuote({ symbol, name, exchange, currency, country, sector, price, prevClose, asOf, provider }) {
   const change = prevClose == null ? null : price - prevClose;
   return {
     symbol,
     name,
     exchange: exchange || null,
     currency: currency || null,
+    country: country || null,
     sector: sector || null,
     price,
     change,
@@ -133,6 +134,7 @@ function createLiveLookup({ yahooClient }) {
       name: profile.name,
       exchange: profile.exchange,
       currency: last.currency || profile.currency,
+      country: profile.country,
       sector: profile.sector,
       price: last.close,
       prevClose: prev?.close ?? null,

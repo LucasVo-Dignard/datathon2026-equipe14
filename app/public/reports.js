@@ -5,8 +5,6 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const dateTime = new Intl.DateTimeFormat('fr-CA', { dateStyle: 'long', timeStyle: 'short' });
-  // Section titles the agent writes on their own line, in capitals.
-  const HEADING_RE = /^[\p{Lu}0-9][\p{Lu}0-9 '’,&/-]{2,}:?$/u;
 
   let loaded = false;
   let generating = false;
@@ -30,14 +28,10 @@
   }
 
   function reportText(content) {
-    const text = el('p', { class: 'report-text' });
-    const lines = content.split('\n');
-    lines.forEach((line, i) => {
-      if (HEADING_RE.test(line.trim())) text.append(el('strong', { class: 'report-heading' }, line.trim()));
-      // Blank lines before a heading: the heading's margin already separates sections.
-      else if (line.trim() || !HEADING_RE.test((lines[i + 1] || '').trim())) text.append(`${line}\n`);
-    });
-    return text;
+    // Same safe Markdown renderer as the assistant's answers (markdown.js).
+    const body = el('div', { class: 'md report-md' });
+    body.append(window.renderMarkdown(content));
+    return body;
   }
 
   function card(report) {

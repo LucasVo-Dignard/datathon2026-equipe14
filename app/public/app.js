@@ -174,7 +174,13 @@ function messageEl(role, content, pending = false) {
   row.className = `msg ${role}` + (pending ? ' pending' : '');
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = content;
+  if (role === 'assistant' && !pending && window.renderMarkdown) {
+    // Assistant answers are Markdown, rendered as DOM nodes (never as HTML).
+    bubble.classList.add('md');
+    bubble.append(window.renderMarkdown(content));
+  } else {
+    bubble.textContent = content;
+  }
   row.append(bubble);
   return row;
 }
@@ -207,7 +213,7 @@ async function send() {
   autosize();
   setHistory(false);
 
-  const pendingEl = messageEl('assistant', 'L’agent réfléchit…', true);
+  const pendingEl = messageEl('assistant', 'L’agent réfléchit… (une recherche peut prendre jusqu’à une minute)', true);
   appendMessage(messageEl('user', content));
   appendMessage(pendingEl);
 
@@ -295,3 +301,69 @@ $('input').addEventListener('input', autosize);
 api('GET', '/api/me')
   .then(({ username }) => showApp(username))
   .catch(() => showLogin());
+
+// ---------------------------------------------------------------------------
+// Resizable assistant panel (desktop): drag the handle, arrows when focused,
+// double-click to reset. The width is remembered in localStorage.
+// ---------------------------------------------------------------------------
+
+(() => {
+  const handle = $('chat-resizer');
+  const workspace = handle?.parentElement;
+  if (!handle || !workspace) return;
+  const KEY = 'chatWidth';
+  const DEFAULT = 400;
+  const MIN_CHAT = 300;
+  const MIN_MAIN = 420;
+
+  const clamp = (w) => Math.round(Math.max(MIN_CHAT, Math.min(w, workspace.clientWidth - MIN_MAIN - handle.offsetWidth)));
+  const current = () => $('assistant').getBoundingClientRect().width;
+
+  function apply(width, save = true) {
+    const w = clamp(width);
+    workspace.style.setProperty('--chat-width', `${w}px`);
+    handle.setAttribute('aria-valuenow', String(w));
+    if (save) localStorage.setItem(KEY, String(w));
+  }
+
+  handle.setAttribute('aria-valuemin', String(MIN_CHAT));
+  const saved = Number(localStorage.getItem(KEY));
+  if (saved) apply(saved, false);
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+    document.body.classList.add('resizing');
+    const right = workspace.getBoundingClientRect().right;
+    const move = (ev) => apply(right - ev.clientX - handle.offsetWidth / 2, false);
+    const stop = () => {
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      handle.removeEventListener('pointermove', move);
+      localStorage.setItem(KEY, String(Math.round(current())));
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', stop, { once: true });
+    handle.addEventListener('pointercancel', stop, { once: true });
+  });
+
+  handle.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 80 : 24;
+    if (e.key === 'ArrowLeft') apply(current() + step);
+    else if (e.key === 'ArrowRight') apply(current() - step);
+    else return;
+    e.preventDefault();
+  });
+
+  handle.addEventListener('dblclick', () => {
+    localStorage.removeItem(KEY);
+    apply(DEFAULT, false);
+  });
+
+  // Keep the width valid when the window gets smaller.
+  window.addEventListener('resize', () => {
+    if (workspace.style.getPropertyValue('--chat-width')) apply(current(), false);
+  });
+})();

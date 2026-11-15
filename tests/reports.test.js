@@ -2,7 +2,7 @@
 // Report data sheet (no agent call).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildBrief, periodStart, PERIODS } = require('../app/reports');
+const { buildBrief, periodStart, exposures, issuerCountry, PERIODS } = require('../app/reports');
 
 const HISTORY = [
   { date: '2025-11-14', value: 900 },
@@ -12,13 +12,19 @@ const HISTORY = [
   { date: '2026-11-14', value: 1000 },
 ];
 
+const holding = (o) => ({ available: true, quantity: 3, price: 123.45, avgCost: 99.87, gain: 11, dayChange: 1, ...o });
+
 const PORTFOLIO = {
   currency: 'CAD',
   asOf: '2026-11-14',
   summary: { totalValue: 1000, investedValue: 900, cash: 100, cost: 800, gain: 100, gainPct: 0.125, dayChange: 10, dayChangePct: 0.0101 },
   holdings: [
-    { symbol: 'RY.TO', name: 'Royal Bank', sector: 'Finance', quantity: 5, available: true, marketValue: 900,
-      weight: 0.9, gain: 100, gainPct: 0.125, dayChangePct: 0.01 },
+    holding({ symbol: 'RY.TO', name: 'Royal Bank', sector: 'Finance', country: 'Canada', currency: 'CAD',
+      marketValue: 450, weight: 0.45, gainPct: 0.125, dayChangePct: 0.01 }),
+    holding({ symbol: 'AAPL', name: 'Apple', sector: 'Technologie', country: null, currency: 'USD',
+      marketValue: 360, weight: 0.36, gainPct: -0.05, dayChangePct: -0.02 }),
+    holding({ symbol: 'ASML', name: 'ASML', sector: 'Technologie', country: 'Netherlands', currency: 'USD',
+      marketValue: 90, weight: 0.09, gainPct: 0.3, dayChangePct: 0 }),
     { symbol: 'NOPE', name: 'NOPE', quantity: 1, available: false, marketValue: 0, weight: 0 },
   ],
   history: HISTORY,
@@ -32,24 +38,46 @@ const PORTFOLIO = {
 const NOW = Date.parse('2026-11-14T12:00:00Z');
 
 test('periodStart picks the last close on or before the cutoff', () => {
-  assert.equal(periodStart(HISTORY, 1, '2026-11-14').date, '2026-11-13');
-  assert.equal(periodStart(HISTORY, 7, '2026-11-14').date, '2026-11-06');
-  assert.equal(periodStart(HISTORY, 30, '2026-11-14').date, '2026-10-14');
-  assert.equal(periodStart(HISTORY, 365, '2026-11-14').date, '2025-11-14');
-  assert.equal(periodStart(HISTORY.slice(0, 1), 7, '2026-11-14'), null);
+  assert.equal(periodStart(HISTORY, 1).date, '2026-11-13');
+  assert.equal(periodStart(HISTORY, 7).date, '2026-11-06');
+  assert.equal(periodStart(HISTORY, 30).date, '2026-10-14');
+  assert.equal(periodStart(HISTORY, 365).date, '2025-11-14');
+  assert.equal(periodStart(HISTORY.slice(0, 1), 7), null);
 });
 
-test('brief covers the period, holdings, related news and profile', () => {
+test('issuer country: profile first, else guessed from the listing', () => {
+  assert.deepEqual(issuerCountry({ symbol: 'ASML', country: 'Netherlands' }), { country: 'Netherlands', inferred: false });
+  assert.deepEqual(issuerCountry({ symbol: 'TD.TO' }), { country: 'Canada', inferred: true });
+  assert.deepEqual(issuerCountry({ symbol: 'AAPL', currency: 'USD' }), { country: 'United States', inferred: true });
+  assert.deepEqual(issuerCountry({ symbol: 'XYZ.ZZ' }), { country: null, inferred: true });
+});
+
+test('regional, currency and sector exposure', () => {
+  const ex = exposures(PORTFOLIO);
+  assert.deepEqual(ex.regions.map(([k, w]) => [k, w.toFixed(2)]), [['Amérique du Nord', '0.90'], ['Europe', '0.10']]);
+  assert.deepEqual(ex.countries.map(([k]) => k), ['Canada', 'États-Unis', 'Pays-Bas']);
+  // Currencies include cash (CAD): (450 + 100) / 1000 and 450 / 1000.
+  assert.deepEqual(ex.currencies.map(([k, w]) => [k, w.toFixed(2)]), [['CAD', '0.55'], ['USD', '0.45']]);
+  assert.deepEqual(ex.sectors.map(([k, w]) => [k, w.toFixed(2)]), [['Finance', '0.50'], ['Technologie', '0.50']]);
+  assert.deepEqual(ex.inferred, ['AAPL']);
+});
+
+test('brief has percentages and dates, never amounts', () => {
   const weekly = buildBrief({ period: 'weekly', portfolio: PORTFOLIO, profile: null, now: NOW });
   assert.match(weekly, /rapport hebdomadaire/);
-  assert.match(weekly, /\+2,04 %/); // 980 -> 1000
-  assert.match(weekly, /RY\.TO ; Royal Bank ; Finance/);
+  assert.match(weekly, /du 6 novembre 2026 au 14 novembre 2026 : \+2,04 %/); // 980 -> 1000
+  assert.match(weekly, /RY\.TO ; Royal Bank ; Finance ; Canada ; CAD ; 50,0 % ; \+12,50 %/);
+  assert.match(weekly, /AAPL ; Apple ; Technologie ; États-Unis ; USD/);
+  assert.match(weekly, /Liquidités : 10,0 %/);
+  assert.match(weekly, /EXPOSITION PAR RÉGION[^\n]*\n- Amérique du Nord : 90,0 %\n- Europe : 10,0 %/);
+  assert.match(weekly, /EXPOSITION PAR DEVISE[^\n]*\n- CAD : 55,0 %\n- USD : 45,0 %/);
+  assert.match(weekly, /déduit de la place de cotation[^\n]*AAPL/);
   assert.match(weekly, /NOPE ; cours indisponible/);
-  assert.match(weekly, /Finance : 90,0 %/);
   assert.match(weekly, /Récent/);
-  assert.doesNotMatch(weekly, /Ancien/);
-  assert.doesNotMatch(weekly, /Hors portefeuille/);
+  assert.doesNotMatch(weekly, /Ancien|Hors portefeuille/);
   assert.match(weekly, /Profil investisseur non renseign/);
+  // No money, prices or quantities: every number is a percentage, a date or a count.
+  assert.doesNotMatch(weekly, /\$|123|99,87|450|360/);
 
   const yearly = buildBrief({ period: 'yearly', portfolio: PORTFOLIO, profile: null, now: NOW });
   assert.match(yearly, /\+11,11 %/); // 900 -> 1000

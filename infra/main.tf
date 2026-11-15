@@ -187,7 +187,7 @@ resource "aws_instance" "web" {
   metadata_options {
     http_tokens = "required" # IMDSv2 only
     # 2 hops so the app container (Docker bridge network) can get the instance
-    # role's credentials (SES); AWS's recommended setting for containers.
+    # role's credentials (SES, Bedrock); AWS's recommended setting for containers.
     http_put_response_hop_limit = 2
   }
 

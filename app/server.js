@@ -1,5 +1,7 @@
 'use strict';
-// Prototype chatbot server: no dependencies, data in one JSON file.
+// Prototype chatbot server. Profiles and chats go to Postgres when DATABASE_URL
+// is set (see profile-store.js, chat-store.js); users, login sessions and, without
+// a database, everything else live in one JSON file.
 // Login is username-only (no password) on purpose: this is a prototype.
 
 const http = require('node:http');
@@ -11,6 +13,7 @@ const reports = require('./reports');
 const { createReportStore } = require('./reports-store');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
+const { createChatStore } = require('./chat-store');
 const { createPortfolioStore } = require('./portfolio-store');
 const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
@@ -51,6 +54,8 @@ function saveDb() {
 
 // Profils investisseurs : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
 const profiles = createProfileStore({ db, saveDb });
+// Conversations du chat : idem (tables chats / chat_messages).
+const chats = createChatStore({ db, saveDb });
 const stocks = createStockLookup();
 const macro = createMacroLookup();
 const portfolioStore = createPortfolioStore({ db, saveDb });
@@ -121,15 +126,7 @@ function requireUser(req) {
   return user;
 }
 
-function ownChat(user, id) {
-  const chat = Object.hasOwn(db.chats, id) ? db.chats[id] : null;
-  if (!chat || chat.owner !== user) throw new HttpError(404, 'Conversation introuvable');
-  return chat;
-}
-
-function chatSummary(chat) {
-  return { id: chat.id, title: chat.title, updatedAt: chat.updatedAt };
-}
+const chatNotFound = () => new HttpError(404, 'Conversation introuvable');
 
 function cleanText(value, max, field) {
   if (typeof value !== 'string' || !value.trim()) throw new HttpError(400, `${field} requis`);
@@ -330,55 +327,40 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === '/api/chats') {
-    if (method === 'GET') {
-      const chats = Object.values(db.chats)
-        .filter((c) => c.owner === user)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .map(chatSummary);
-      return sendJson(res, 200, chats);
-    }
-    if (method === 'POST') {
-      const now = Date.now();
-      const chat = {
-        id: crypto.randomUUID(),
-        owner: user,
-        title: DEFAULT_TITLE,
-        createdAt: now,
-        updatedAt: now,
-        messages: [],
-      };
-      db.chats[chat.id] = chat;
-      saveDb();
-      return sendJson(res, 201, chat);
-    }
+    if (method === 'GET') return sendJson(res, 200, await chats.list(user));
+    if (method === 'POST') return sendJson(res, 201, await chats.create(user, DEFAULT_TITLE));
   }
 
   const match = pathname.match(/^\/api\/chats\/([0-9a-f-]{36})(\/messages)?$/);
   if (match) {
-    const chat = ownChat(user, match[1]);
+    const id = match[1];
 
     if (!match[2]) {
-      if (method === 'GET') return sendJson(res, 200, chat);
+      if (method === 'GET') {
+        const chat = await chats.get(user, id);
+        if (!chat) throw chatNotFound();
+        return sendJson(res, 200, chat);
+      }
       if (method === 'PATCH') {
         const { title } = await readJson(req);
-        chat.title = cleanText(title, MAX_TITLE_CHARS, 'Titre');
-        saveDb();
-        return sendJson(res, 200, chatSummary(chat));
+        const summary = await chats.rename(user, id, cleanText(title, MAX_TITLE_CHARS, 'Titre'));
+        if (!summary) throw chatNotFound();
+        return sendJson(res, 200, summary);
       }
       if (method === 'DELETE') {
-        delete db.chats[chat.id];
-        saveDb();
+        if (!(await chats.remove(user, id))) throw chatNotFound();
         return sendJson(res, 200, { ok: true });
       }
     } else if (method === 'POST') {
+      const chat = await chats.get(user, id);
+      if (!chat) throw chatNotFound();
       const { content } = await readJson(req);
       const text = cleanText(content, MAX_MESSAGE_CHARS, 'Message');
 
       const userMsg = { role: 'user', content: text, at: Date.now() };
-      chat.messages.push(userMsg);
-      if (chat.title === DEFAULT_TITLE) {
-        chat.title = text.length > 40 ? `${text.slice(0, 40)}…` : text;
-      }
+      const title = chat.title === DEFAULT_TITLE
+        ? (text.length > 40 ? `${text.slice(0, 40)}…` : text)
+        : undefined;
 
       // Si la base est indisponible, l'agent répond quand même, sans le profil.
       const investorProfile = await profiles.get(user).then((p) => p?.result || null, (err) => {
@@ -393,7 +375,7 @@ async function handleApi(req, res, pathname) {
       let answer;
       try {
         answer = await reply({
-          messages: chat.messages.map(({ role, content }) => ({ role, content })),
+          messages: [...chat.messages, userMsg].map(({ role, content }) => ({ role, content })),
           username: user,
           chatId: chat.id,
           profile: investorProfile,
@@ -405,10 +387,10 @@ async function handleApi(req, res, pathname) {
       }
 
       const botMsg = { role: 'assistant', content: String(answer), at: Date.now() };
-      chat.messages.push(botMsg);
-      chat.updatedAt = botMsg.at;
-      saveDb();
-      return sendJson(res, 200, { messages: [userMsg, botMsg], chat: chatSummary(chat) });
+      // Question and answer are saved together, once the answer is known.
+      const summary = await chats.append(user, chat.id, [userMsg, botMsg], { title });
+      if (!summary) throw chatNotFound(); // deleted while the agent was answering
+      return sendJson(res, 200, { messages: [userMsg, botMsg], chat: summary });
     }
   }
 
@@ -422,6 +404,7 @@ async function handleApi(req, res, pathname) {
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/markdown.js': ['markdown.js', 'text/javascript; charset=utf-8'],
   '/dashboard.js': ['dashboard.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
@@ -481,8 +464,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-Promise.all([profiles.init(), portfolioStore.init()]).then(
-  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
+Promise.all([profiles.init(), portfolioStore.init(), chats.init()]).then(
+  () => server.listen(PORT, () => console.log(
+    `chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, conversations : ${chats.kind}, `
+    + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
   (err) => {
     console.error(`Impossible d'initialiser le stockage (${profiles.kind}) :`, err.message || err.code || err);
     process.exit(1);
