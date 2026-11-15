@@ -20,8 +20,6 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 - [Sources de données](#sources-de-données)
 - [Configuration](#configuration)
 - [Démarrage et reproduction](#démarrage-et-reproduction)
-- [Coûts et arrêt](#coûts-et-arrêt)
-- [Sécurité](#sécurité)
 
 ## Fonctionnalités
 
@@ -284,32 +282,3 @@ L'app les trouve par les variables `RESEARCH_*`. Sur l'EC2, ces variables sont d
 
 Prod : `TF_WORKSPACE=default`, avec `-var confirm_prod=true` pour Terraform et
 `--env prod` pour `migrate.py`. On n'y touche que sur demande, et toujours depuis `main`.
-
-## Coûts et arrêt
-
-Laissé allumé, un environnement coûte environ **37 $ par mois** : environ 26 $ pour
-RDS, 7,50 $ pour l'EC2 et 3,60 $ pour l'Elastic IP. S'y ajoutent quelques cents par
-jour pour Comprehend, SES et Fargate, plus Bedrock à l'usage. Pour arrêter ce qui
-ne sert pas :
-
-| Quoi | Commande |
-| --- | --- |
-| EC2 | `terraform -chdir=infra apply -var instance_running=false` (l'Elastic IP reste facturée) |
-| RDS | `aws rds stop-db-instance --db-instance-identifier datathon2026-equipe14-<nom>-db` (AWS la redémarre après 7 jours) |
-| Tout | `terraform destroy` dans `infra-batch`, puis `infra-db`, puis `infra` |
-
-## Sécurité
-
-Les règles des organisateurs sont obligatoires. Voici comment le projet les respecte :
-- **aucun groupe de sécurité ouvert à Internet** : le port 80 n'est ouvert qu'à
-  Polytechnique et aux adresses IP déclarées. Aucune entrée sur RDS ni sur Batch ;
-- **RDS non publique**, accessible seulement depuis le serveur web et le job, en
-  **TLS vérifié** (certificat et nom d'hôte) ;
-- **buckets S3 privés** : blocage d'accès public et chiffrement. HTTPS obligatoire
-  pour ceux que gère le repo (état Terraform, migrations, rapports) ;
-- **aucun identifiant dans Git** : mots de passe dans Secrets Manager, déploiements
-  par SSM, sans SSH ;
-- **ressources minimales** : `t3.micro`, `db.t4g.small`, Fargate 0,25 vCPU, pas de
-  NAT, et arrêt de ce qui ne sert pas (voir [Coûts et arrêt](#coûts-et-arrêt)) ;
-- **les données des sources sont traitées comme non fiables** : flux RSS bornés en
-  taille et en temps, HTML retiré, liens `http(s)` seulement, affichage par `textContent`.
