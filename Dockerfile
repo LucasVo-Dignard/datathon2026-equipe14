@@ -7,6 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY app/ ./app/
+COPY src/ ./src/
 
 # Amazon RDS root certificates, so the app verifies the database's certificate
 # and hostname (DATABASE_URL uses sslmode=verify-full&sslrootcert=..., see

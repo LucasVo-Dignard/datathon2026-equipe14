@@ -61,6 +61,11 @@ creates or deletes AWS resources.
   `.env-dev`. Work in a dev environment by default. Prod needs
   `-var confirm_prod=true` (Terraform), `--env prod` (`db/migrate.py`) or
   `TF_WORKSPACE=default` (scripts): only touch it when asked.
+- Terraform does not deploy app code. After changing the app (`app/`, `src/`,
+  `package.json`, `Dockerfile`), redeploy it to the dev server with
+  `./scripts/deploy-app.sh` (builds the image, pushes it to ECR and restarts
+  the container on the EC2), then check it works. Batch job changes go
+  through `./scripts/deploy-batch.sh`.
 - Terraform state: S3 bucket `datathon2026-equipe14-tfstate-779846826297`
   (created by `infra/bootstrap-state-bucket.sh`, not by Terraform, so
   `terraform destroy` does not delete it).
@@ -68,9 +73,10 @@ creates or deletes AWS resources.
 ## Database
 
 - RDS PostgreSQL 17 (`infra-db/`). Data is loaded on demand: check the DB
-  first, call a fetcher (`src/marketdata`) only if data is missing or stale.
+  first, call a fetcher (`src/marketdata`, Node.js) only if data is missing or stale
+  (the stock search does this in `app/stocks.js`).
   Exception: symbols in `tracked_symbols` are refreshed every weekday by the
-  batch job (`src/marketdata/jobs/daily_refresh.py`, `infra-batch/`), so
+  batch job (`src/marketdata/jobs/daily-refresh.js`, `infra-batch/`), so
   changes can be detected for notifications. Keep that list small. Scheduled
   work does not run on the EC2 web server.
 - Schema changes go only through Flyway migrations in `db/migrations/`

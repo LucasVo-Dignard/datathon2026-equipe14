@@ -1,7 +1,7 @@
 # Infra: daily refresh job (AWS Batch on Fargate)
 
 A third Terraform stack, with its own state. Once a day it runs
-`python -m marketdata.jobs.daily_refresh` (see `../src/marketdata/jobs/`),
+`node src/marketdata/jobs/daily-refresh.js` (see `../src/marketdata/`),
 which refreshes every active symbol in the `tracked_symbols` table: profile,
 metrics, price targets, analyst rating actions, recent prices and, if
 a Finnhub key is configured, news, earnings and recommendations. Symbols
@@ -40,8 +40,7 @@ stack first**.
   Manager without a NAT gateway.
 - **Credentials:** the job role may call `secretsmanager:GetSecretValue` on
   the RDS master secret only. The code reads the user name and password at
-  runtime (`src/marketdata/db/connection.py`) and connects with TLS
-  (`sslmode=require`). Nothing is stored in the image, the job definition or
+  runtime (`src/marketdata/db/connection.js`) and connects with TLS. Nothing is stored in the image, the job definition or
   the Terraform state.
 
 ## Security rules this follows
@@ -52,7 +51,7 @@ stack first**.
 - RDS stays private: the new rule references a security group, not an IP
   range.
 - No credentials in Git, in the image (`Dockerfile.dockerignore` is an
-  allowlist: only `pyproject.toml` and `src/`) or in Terraform.
+  allowlist: only `package*.json` and `src/`) or in Terraform.
 - Modest resources: Fargate runs only while the job runs (a few minutes a
   day); no NAT gateway, no Elastic IP, no idle instance.
 
@@ -83,7 +82,9 @@ Build and try it locally:
 
 ```bash
 docker build -f infra-batch/Dockerfile -t marketdata-job .
-docker run --rm -e DATABASE_URL=postgresql://bncd_admin:localdev@host.docker.internal:5432/marketdata marketdata-job
+docker run --rm -e DATABASE_URL=postgres://bncd_admin:localdev@host.docker.internal:5432/marketdata marketdata-job
+# or without Docker:
+DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata node src/marketdata/jobs/daily-refresh.js --symbols RY.TO NVDA
 ```
 
 ### Run it now (without waiting for the schedule)

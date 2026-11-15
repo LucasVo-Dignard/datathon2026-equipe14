@@ -38,10 +38,12 @@ async function showApp(username) {
   $('login-view').hidden = true;
   $('app-view').hidden = false;
   $('account-name').textContent = username;
+  const savedTab = sessionStorage.getItem('tab');
+  if (savedTab) $('app-view').dataset.tab = savedTab; // avoid flashing the default tab while loading
   window.Dashboard.load();
   const [chats, hasProfile] = await Promise.all([api('GET', '/api/chats'), window.Profile.init()]);
-  // First visit: guide the user through the investor-profile questionnaire.
-  setTab(hasProfile ? 'portfolio' : 'profile');
+  // Refresh: stay on the same tab. First visit: guide the user through the investor-profile questionnaire.
+  setTab(savedTab || (hasProfile ? 'portfolio' : 'profile'));
   state.chats = chats;
   if (state.chats.length) await openChat(state.chats[0].id);
   else newChat();
@@ -52,10 +54,12 @@ async function showApp(username) {
 // phones show one pane at a time.
 function setTab(tab) {
   $('app-view').dataset.tab = tab;
+  sessionStorage.setItem('tab', tab); // restored on refresh
   for (const b of document.querySelectorAll('button[data-tab]')) {
     b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   }
   if (tab === 'portfolio') window.Dashboard.redraw();
+  else if (tab === 'macro') window.Macro.load();
   else scrollMessages();
 }
 
@@ -251,6 +255,7 @@ $('logout').addEventListener('click', async () => {
   await api('POST', '/api/logout').catch(() => {});
   state.chats = [];
   state.currentId = null;
+  sessionStorage.removeItem('tab');
   setHistory(false);
   showLogin();
 });

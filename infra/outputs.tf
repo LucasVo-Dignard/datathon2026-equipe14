@@ -35,5 +35,5 @@ output "ecr_repository_url" {
 
 output "alerts_sender_email" {
   description = "Sender of the price alerts (SES identity, see ses.tf), or null if alerts are disabled."
-  value       = var.alerts_sender_email
+  value       = local.alerts_enabled ? local.alerts_sender : null
 }

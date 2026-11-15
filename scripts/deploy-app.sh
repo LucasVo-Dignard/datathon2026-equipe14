@@ -24,7 +24,7 @@ REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 REPO_URL="$(terraform -chdir=infra output -raw ecr_repository_url)"
 INSTANCE_ID="$(terraform -chdir=infra output -raw instance_id)"
 TAG="$(git rev-parse --short HEAD)"
-if [ -n "$(git status --porcelain -- app package.json package-lock.json Dockerfile)" ]; then
+if [ -n "$(git status --porcelain -- app src package.json package-lock.json Dockerfile)" ]; then
   TAG="$TAG-dirty"
 fi
 

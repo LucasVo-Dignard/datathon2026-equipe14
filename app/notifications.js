@@ -4,8 +4,9 @@
 //
 //   - l'app enregistre l'abonnement, fait vérifier l'adresse si besoin et
 //     envoie le courriel de test (ce fichier) ;
-//   - le job quotidien (src/marketdata/jobs/price_alerts.py) envoie les vraies
-//     alertes, à partir de la table notification_subscriptions (V5, V6).
+//   - le job quotidien (src/marketdata/jobs/price-alerts.js) envoie les vraies
+//     alertes : variations des titres du portefeuille (portfolio_holdings, V7)
+//     des abonnés (notification_subscriptions, V8).
 //
 // Bac à sable SES : tant que le compte n'a pas l'accès « production », SES
 // n'envoie qu'à des adresses vérifiées. À l'abonnement, on crée donc l'identité
@@ -23,11 +24,10 @@
 const {
   SESv2Client, SendEmailCommand, GetAccountCommand, CreateEmailIdentityCommand, GetEmailIdentityCommand,
 } = require('@aws-sdk/client-sesv2');
-
-// Seuil de variation journalière (%) selon le niveau de risque du profil :
-// un profil prudent est averti plus tôt. Hypothèses du prototype.
-const THRESHOLDS = { faible: 2, 'faible-modere': 3, modere: 4, 'modere-eleve': 5, eleve: 7 };
-const DEFAULT_THRESHOLD = 4; // sans profil
+// Seuils et format des courriels, partagés avec le job quotidien.
+const {
+  THRESHOLDS, thresholdFor, escapeHtml, unsubscribeUrl, emailContent, sesRequest,
+} = require('../src/marketdata/alerts');
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/;
 const MAX_EMAIL = 254;
 const TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,43 +40,12 @@ class NotificationError extends Error {
   }
 }
 
-const thresholdFor = (profileResult) => THRESHOLDS[profileResult?.level?.id] ?? DEFAULT_THRESHOLD;
-
 function normalizeEmail(value) {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!email || email.length > MAX_EMAIL || !EMAIL_RE.test(email)) {
     throw new NotificationError(400, 'Adresse courriel invalide');
   }
   return email;
-}
-
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[c]));
-
-function unsubscribeUrl(appUrl, username, token) {
-  return `${appUrl}/desabonnement?u=${encodeURIComponent(username)}&t=${token}`;
-}
-
-// Courriel texte + HTML. paragraphs : liste de chaînes (un paragraphe chacune).
-function emailContent({ subject, paragraphs, appUrl, unsubscribe }) {
-  const footer = 'Simulation éducative (prototype du Datathon 2026) : ce message n’est pas un conseil financier personnalisé.';
-  const text = [
-    ...paragraphs.flatMap((p) => [p, '']),
-    appUrl ? `Voir votre portefeuille : ${appUrl}` : null,
-    '',
-    '—',
-    footer,
-    `Ne plus recevoir ces alertes : ${unsubscribe}`,
-  ].filter((l) => l !== null).join('\n');
-  const html = `<!doctype html><html lang="fr"><body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#0b0b0b;line-height:1.5;max-width:600px">
-${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n')}
-${appUrl ? `<p><a href="${escapeHtml(appUrl)}">Voir votre portefeuille</a></p>` : ''}
-<hr style="border:0;border-top:1px solid #e1e0d9">
-<p style="font-size:12px;color:#52514e">${escapeHtml(footer)}<br>
-<a href="${escapeHtml(unsubscribe)}" style="color:#52514e">Ne plus recevoir ces alertes</a></p>
-</body></html>`;
-  return { subject, text, html };
 }
 
 const errName = (err) => err?.name || err?.Code || '';
@@ -126,10 +95,15 @@ function createNotifications({
     }
   }
 
+  // Les titres suivis sont ceux du portefeuille de l'utilisateur (V7).
   async function row(username) {
     const { rows } = await pool.query(
-      `SELECT email, threshold_pct, symbols, unsubscribe_token
-         FROM notification_subscriptions WHERE username = $1`,
+      `SELECT n.email, n.threshold_pct, n.unsubscribe_token,
+              coalesce(array_agg(h.symbol ORDER BY h.symbol) FILTER (WHERE h.symbol IS NOT NULL), '{}') AS symbols
+         FROM notification_subscriptions n
+         LEFT JOIN portfolio_holdings h ON h.username = n.username
+        WHERE n.username = $1
+        GROUP BY n.email, n.threshold_pct, n.unsubscribe_token`,
       [username],
     );
     return rows[0] || null;
@@ -151,30 +125,22 @@ function createNotifications({
     };
   }
 
-  async function subscribe(username, rawEmail, { profile, symbols }) {
+  async function subscribe(username, rawEmail, { profile } = {}) {
     requireEnabled();
     const email = normalizeEmail(rawEmail);
-    const tickers = [...new Set(symbols)].filter(Boolean);
     const current = await row(username);
     await pool.query(
-      `INSERT INTO notification_subscriptions (username, email, threshold_pct, symbols)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO notification_subscriptions (username, email, threshold_pct)
+       VALUES ($1, $2, $3)
        ON CONFLICT (username) DO UPDATE
-         SET email = EXCLUDED.email, threshold_pct = EXCLUDED.threshold_pct, symbols = EXCLUDED.symbols,
+         SET email = EXCLUDED.email, threshold_pct = EXCLUDED.threshold_pct,
              -- nouvelle adresse : nouveau lien de désabonnement
              unsubscribe_token = CASE WHEN notification_subscriptions.email = EXCLUDED.email
                                       THEN notification_subscriptions.unsubscribe_token
                                       ELSE gen_random_uuid() END,
              updated_at = now()`,
-      [username, email, thresholdFor(profile), tickers],
+      [username, email, thresholdFor(profile)],
     );
-    // Le job quotidien ne met à jour que les titres suivis : on y ajoute ceux du portefeuille.
-    if (tickers.length) {
-      await pool.query(
-        'INSERT INTO tracked_symbols (symbol) SELECT unnest($1::text[]) ON CONFLICT (symbol) DO NOTHING',
-        [tickers],
-      );
-    }
     if (!current || current.email !== email || (await deliverability(email)) === 'pending') {
       await requestVerification(email);
     }
@@ -231,18 +197,9 @@ function createNotifications({
         `Titres suivis : ${r.symbols.join(', ') || 'aucun'}.`,
       ],
     });
-    const { MessageId } = await ses.send(new SendEmailCommand({
-      FromEmailAddress: sender,
-      Destination: { ToAddresses: [r.email] },
-      ConfigurationSetName: configurationSet || undefined,
-      Content: {
-        Simple: {
-          Subject: { Data: content.subject, Charset: 'UTF-8' },
-          Body: { Text: { Data: content.text, Charset: 'UTF-8' }, Html: { Data: content.html, Charset: 'UTF-8' } },
-          Headers: [{ Name: 'List-Unsubscribe', Value: `<${unsubscribe}>` }],
-        },
-      },
-    }));
+    const { MessageId } = await ses.send(new SendEmailCommand(
+      sesRequest({ sender, to: r.email, configurationSet, content }),
+    ));
     return { sent: true, messageId: MessageId, email: r.email };
   }
 

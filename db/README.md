@@ -50,7 +50,7 @@ The target environment comes from `--env` or `TF_WORKSPACE` (in `.env-dev`,
 see `../ENVIRONMENTS.md`); there is no default, so prod is only migrated when
 named. Migrate your own environment first, then prod.
 
-Use the repo's `.venv` (`pip install -e ".[ops]"` installs boto3). The script
+The script needs Python 3 with boto3 (`pip install boto3`, e.g. in a `.venv`). It
 reads the AWS credentials from `.env-aws` itself. When you add a migration:
 
 1. Write `migrations/V<n>__<description>.sql`.

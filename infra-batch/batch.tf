@@ -70,7 +70,7 @@ resource "aws_batch_job_definition" "daily_refresh" {
       { name = "DB_SECRET_ARN", value = local.db_secret_arn },
       { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
       { name = "REFRESH_ENABLED", value = tostring(var.refresh_enabled) },
-      # Price-move alerts by email (SES) after the refresh (price_alerts.py).
+      # Price-move alerts by email (SES) after the refresh (price-alerts.js).
       # An empty ALERTS_SENDER turns them off.
       { name = "ALERTS_SENDER", value = local.alerts_sender },
       { name = "SES_CONFIGURATION_SET", value = local.alerts_sender != "" ? local.alerts_configuration_set : "" },

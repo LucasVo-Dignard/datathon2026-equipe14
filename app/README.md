@@ -8,7 +8,14 @@ a prototype), conversations per user, data in a JSON file.
   It receives the user's investor `profile` (or `null`).
 - `profile.js`: investor profile. Guided questionnaire, risk scoring, matching with the
   case personas (Amira, Mateo, Robert), tensions and guardrails for the agents.
+- `stocks.js`: quick view for the ticker search bar (`GET /api/stocks/:symbol`): name,
+  exchange, currency, last close and day change. With `DATABASE_URL`, it reads
+  `company_profiles` / `price_bars`. When the symbol is missing or older than an hour,
+  it first loads it from Yahoo with `src/marketdata` and saves it: profile, metrics,
+  price target, rating actions, and a year of daily prices on the first load
+  (the last week afterwards). Without a database, it asks Yahoo and saves nothing.
 - `public/`: interface (HTML/CSS/JS). `profile-ui.js` is the questionnaire and result page.
+- `portfolio.js` / `portfolio-store.js`: the user's simulated portfolio (see below).
 
 Run locally:
 
@@ -66,13 +73,37 @@ All thresholds are prototype assumptions, for simulation only, not financial adv
 Tests: `npm test` (from the repo root). To also test Postgres against a **throwaway**
 database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`.
 
+## Portfolio
+
+The first time the user opens the Portefeuille tab, they choose how to start:
+
+- **Random**: 8 symbols picked at random from `tracked_symbols` (those that already
+  have prices in `price_bars` first, CAD/USD preferred), each worth about
+  1 500–8 000 $, with a simulated purchase cost (25 % below to 20 % above the
+  current price) and some cash. Without a database, it picks from the V3 starter list.
+- **Custom**: an empty portfolio. The user adds symbols with a quantity below the
+  "Mes actions" table; the purchase cost is the current price.
+
+The ✎ button on each row of "Mes actions" changes the quantity (or removes the stock).
+Positions are valued with the latest known price (`stocks.js`), converted to CAD with
+Yahoo exchange rates (`USDCAD=X`, ...). Performance history and news are still fictional.
+
+API (logged-in user): `GET /api/portfolio` (`null` until the user has chosen),
+`POST /api/portfolio { mode: 'random' | 'custom' }`,
+`PUT /api/portfolio/holdings/:symbol { quantity }` (add or edit),
+`DELETE /api/portfolio/holdings/:symbol`.
+
+Storage works like profiles: with `DATABASE_URL`, tables `portfolios` and
+`portfolio_holdings` (migration `V7__create_portfolios.sql`, the server refuses to
+start without it). Otherwise `db.users[username].portfolio` in the JSON file.
+
 ## Price alerts by email
 
 `notifications.js` (API `/api/notifications`, card on the profile page) and the
-daily job `src/marketdata/jobs/price_alerts.py` email users when a holding moves
-by their threshold or more in one trading day. The threshold follows the risk
-level (2 % Faible … 7 % Élevé, 4 % without a profile). Sent with Amazon SES
-(see `infra/README.md`); tables `notification_subscriptions` and
-`price_alerts_sent` (migrations V5, V6). Needs Postgres and `ALERTS_SENDER`,
-otherwise the card says alerts are unavailable.
-
+daily job `src/marketdata/jobs/price-alerts.js` (run after `daily-refresh.js`)
+email users when a stock **in their portfolio** moves by their threshold or more
+in one trading day. The threshold follows the risk level (2 % Faible … 7 % Élevé,
+4 % without a profile). Thresholds and the email format are shared in
+`src/marketdata/alerts.js`. Sent with Amazon SES (see `infra/README.md`); tables
+`notification_subscriptions` and `price_alerts_sent` (migration V8). Needs
+Postgres and `ALERTS_SENDER`, otherwise the card says alerts are unavailable.

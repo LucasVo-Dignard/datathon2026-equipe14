@@ -1,6 +1,6 @@
 'use strict';
 // Pure tests always run. The Postgres tests need TEST_DATABASE_URL pointing to a
-// THROWAWAY database with db/migrations V1..V6 applied (they delete rows).
+// THROWAWAY database with db/migrations V1..V8 applied (they delete rows).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -37,7 +37,7 @@ test('disabled without a database or a sender', async () => {
   const n = createNotifications({});
   assert.equal(n.enabled, false);
   assert.deepEqual(await n.get('x'), { enabled: false, status: 'none', thresholdPct: 4 });
-  await assert.rejects(n.subscribe('x', 'a@b.cd', { symbols: [] }), (e) => e.status === 503);
+  await assert.rejects(n.subscribe('x', 'a@b.cd', {}), (e) => e.status === 503);
   assert.equal(await n.unsubscribeWithToken('x', '00000000-0000-4000-8000-000000000000'), false);
 });
 
@@ -75,7 +75,7 @@ async function withDb(fn) {
   const { Pool } = require('pg');
   const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
   const clean = () => pool.query("DELETE FROM notification_subscriptions WHERE username LIKE 'test-%'")
-    .then(() => pool.query("DELETE FROM tracked_symbols WHERE symbol = 'ZZZ.TO'"));
+    .then(() => pool.query("DELETE FROM portfolios WHERE username LIKE 'test-%'"));
   await clean();
   try {
     await fn(pool);
@@ -94,19 +94,24 @@ test('Postgres, SES sandbox: verify, test email, threshold, unsubscribe link', n
   });
   assert.equal((await n.get('test-a', { profile: modere })).thresholdPct, 4);
 
-  let st = await n.subscribe('test-a', ' A@Example.com ', { profile: modere, symbols: ['RY.TO', 'ZZZ.TO', 'RY.TO'] });
+  let st = await n.subscribe('test-a', ' A@Example.com ', { profile: modere });
   assert.equal(st.status, 'pending');
   assert.equal(st.sandbox, true);
   assert.equal(st.email, 'a@example.com');
-  assert.deepEqual(st.symbols, ['RY.TO', 'ZZZ.TO']);
+  assert.deepEqual(st.symbols, [], 'no portfolio yet');
   assert.ok(ses.calls.some((c) => c.name === 'CreateEmailIdentityCommand' && c.input.EmailIdentity === 'a@example.com'),
     'sandbox: SES is asked to send its verification email');
-  assert.equal((await pool.query("SELECT 1 FROM tracked_symbols WHERE symbol = 'ZZZ.TO'")).rowCount, 1);
+
+  // The followed symbols are the user's holdings (V7), read live.
+  await pool.query("INSERT INTO portfolios (username, source, cash) VALUES ('test-a', 'custom', 0)");
+  await pool.query(`INSERT INTO portfolio_holdings (username, symbol, quantity, avg_cost)
+                    VALUES ('test-a', 'TD.TO', 1, 1), ('test-a', 'RY.TO', 2, 1)`);
+  assert.deepEqual((await n.get('test-a')).symbols, ['RY.TO', 'TD.TO']);
 
   await assert.rejects(n.sendTest('test-a', { profile: modere }), (e) => e.status === 409 && /Vérifiez/.test(e.message));
 
   // Subscribing again before verifying must not fail (identity already exists).
-  st = await n.subscribe('test-a', 'a@example.com', { profile: modere, symbols: ['RY.TO'] });
+  st = await n.subscribe('test-a', 'a@example.com', { profile: modere });
   assert.equal(st.status, 'pending');
 
   ses.verify('a@example.com');
@@ -139,9 +144,9 @@ test('Postgres, SES sandbox: verify, test email, threshold, unsubscribe link', n
   assert.equal((await n.get('test-a')).status, 'none');
 
   // A new subscription with another address gets a new token.
-  await n.subscribe('test-a', 'a@example.com', { profile: modere, symbols: [] });
+  await n.subscribe('test-a', 'a@example.com', { profile: modere });
   const t1 = (await pool.query("SELECT unsubscribe_token FROM notification_subscriptions WHERE username = 'test-a'")).rows[0].unsubscribe_token;
-  await n.subscribe('test-a', 'b@example.com', { profile: modere, symbols: [] });
+  await n.subscribe('test-a', 'b@example.com', { profile: modere });
   const t2 = (await pool.query("SELECT unsubscribe_token FROM notification_subscriptions WHERE username = 'test-a'")).rows[0].unsubscribe_token;
   assert.notEqual(t1, t2);
 
@@ -152,7 +157,7 @@ test('Postgres, SES sandbox: verify, test email, threshold, unsubscribe link', n
 test('Postgres, SES production access: active right away, no verification email', needsDb, () => withDb(async (pool) => {
   const ses = fakeSes({ production: true });
   const n = createNotifications({ pool, ses, sender: 'alertes@example.com', appUrl: 'http://app' });
-  const st = await n.subscribe('test-p', 'p@example.com', { profile: modere, symbols: [] });
+  const st = await n.subscribe('test-p', 'p@example.com', { profile: modere });
   assert.equal(st.status, 'active');
   assert.equal(st.sandbox, false);
   assert.ok(!ses.calls.some((c) => c.name === 'CreateEmailIdentityCommand'));

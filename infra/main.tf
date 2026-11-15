@@ -165,7 +165,7 @@ locals {
     # Same name as aws_db_instance.main in ../infra-db (that stack may not exist yet).
     db_identifier = "${local.prefix}-db"
     # Price alerts (ses.tf). Not secret: written to /etc/chatbot.env.
-    alerts_sender     = local.alerts_enabled ? var.alerts_sender_email : ""
+    alerts_sender     = local.alerts_enabled ? local.alerts_sender : ""
     configuration_set = local.alerts_enabled ? aws_sesv2_configuration_set.alerts[0].configuration_set_name : ""
     app_url           = "http://${aws_eip.web.public_ip}"
   })

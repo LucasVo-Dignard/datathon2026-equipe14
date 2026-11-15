@@ -9,7 +9,10 @@ const crypto = require('node:crypto');
 const { reply } = require('./bot');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
-const { getPortfolio } = require('./portfolio');
+const { createPortfolioStore } = require('./portfolio-store');
+const { createPortfolioService, PortfolioError } = require('./portfolio');
+const { createStockLookup, normalizeSymbol } = require('./stocks');
+const { createMacroLookup } = require('./macro');
 const { createNotificationsFromEnv, NotificationError } = require('./notifications');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -46,6 +49,10 @@ function saveDb() {
 
 // Profils investisseurs : Postgres si DATABASE_URL est défini, sinon le fichier JSON.
 const profiles = createProfileStore({ db, saveDb });
+const stocks = createStockLookup();
+const macro = createMacroLookup();
+const portfolioStore = createPortfolioStore({ db, saveDb });
+const portfolios = createPortfolioService({ store: portfolioStore, stocks });
 
 // Alertes de prix par courriel (SES) : actives seulement avec Postgres et ALERTS_SENDER.
 const notifications = createNotificationsFromEnv({ pool: profiles.pool });
@@ -127,6 +134,15 @@ function cleanText(value, max, field) {
   return text;
 }
 
+async function portfolioCall(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof PortfolioError) throw new HttpError(err.status, err.message);
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // API routes
 // ---------------------------------------------------------------------------
@@ -201,8 +217,7 @@ async function handleApi(req, res, pathname) {
       if (method === 'PUT') {
         const { email } = await readJson(req);
         const p = await profiles.get(user);
-        const symbols = getPortfolio(user).holdings.map((h) => h.ticker);
-        return sendJson(res, 200, await notifications.subscribe(user, email, { profile: p?.result, symbols }));
+        return sendJson(res, 200, await notifications.subscribe(user, email, { profile: p?.result }));
       }
       if (method === 'DELETE') {
         await notifications.unsubscribe(user);
@@ -215,8 +230,60 @@ async function handleApi(req, res, pathname) {
     }
   }
 
-  if (pathname === '/api/portfolio' && method === 'GET') {
-    return sendJson(res, 200, getPortfolio(user));
+  if (pathname === '/api/portfolio') {
+    if (method === 'GET') return sendJson(res, 200, await portfolios.get(user));
+    // Premier choix de l'utilisateur : { mode: 'random' | 'custom' }.
+    if (method === 'POST') {
+      const { mode } = await readJson(req);
+      return sendJson(res, 201, await portfolioCall(() => portfolios.create(user, mode)));
+    }
+  }
+
+  const holdingMatch = pathname.match(/^\/api\/portfolio\/holdings\/([^/]+)$/);
+  if (holdingMatch) {
+    let raw;
+    try {
+      raw = decodeURIComponent(holdingMatch[1]);
+    } catch {
+      raw = '';
+    }
+    const symbol = normalizeSymbol(raw);
+    if (!symbol) throw new HttpError(400, 'Symbole invalide');
+    if (method === 'PUT') {
+      const { quantity } = await readJson(req);
+      return sendJson(res, 200, await portfolioCall(() => portfolios.setQuantity(user, symbol, quantity)));
+    }
+    if (method === 'DELETE') return sendJson(res, 200, await portfolios.remove(user, symbol));
+  }
+
+  if (pathname === '/api/macro' && method === 'GET') {
+    try {
+      return sendJson(res, 200, await macro.overview());
+    } catch (err) {
+      console.error('macro error:', err.message);
+      throw new HttpError(502, 'Données macroéconomiques indisponibles, réessayez plus tard');
+    }
+  }
+
+  const stockMatch = pathname.match(/^\/api\/stocks\/([^/]+)$/);
+  if (stockMatch && method === 'GET') {
+    let raw;
+    try {
+      raw = decodeURIComponent(stockMatch[1]);
+    } catch {
+      raw = '';
+    }
+    const symbol = normalizeSymbol(raw);
+    if (!symbol) throw new HttpError(400, 'Symbole invalide');
+    let stock;
+    try {
+      stock = await stocks.lookup(symbol);
+    } catch (err) {
+      console.error(`stock lookup error (${symbol}):`, err.message);
+      throw new HttpError(502, 'Source de données indisponible, réessayez plus tard');
+    }
+    if (!stock) throw new HttpError(404, `Aucune donnée pour ${symbol}`);
+    return sendJson(res, 200, stock);
   }
 
   if (pathname === '/api/chats') {
@@ -275,6 +342,10 @@ async function handleApi(req, res, pathname) {
         console.error('profile load error:', err.message);
         return null;
       });
+      const portfolio = await portfolios.get(user).catch((err) => {
+        console.error('portfolio load error:', err.message);
+        return null;
+      });
 
       let answer;
       try {
@@ -283,7 +354,7 @@ async function handleApi(req, res, pathname) {
           username: user,
           chatId: chat.id,
           profile: investorProfile,
-          portfolio: getPortfolio(user),
+          portfolio,
         });
       } catch (err) {
         console.error('bot error:', err);
@@ -312,6 +383,8 @@ const STATIC = {
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
   '/notifications-ui.js': ['notifications-ui.js', 'text/javascript; charset=utf-8'],
+  '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
+  '/macro.js': ['macro.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
@@ -364,12 +437,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-profiles.init().then(
-  () => server.listen(PORT, () => console.log(
-    `chatbot listening on :${PORT} (profils : ${profiles.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`,
-  )),
+Promise.all([profiles.init(), portfolioStore.init()]).then(
+  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
   (err) => {
-    console.error(`Impossible d'initialiser le stockage des profils (${profiles.kind}) :`, err.message || err.code || err);
+    console.error(`Impossible d'initialiser le stockage (${profiles.kind}) :`, err.message || err.code || err);
     process.exit(1);
   },
 );

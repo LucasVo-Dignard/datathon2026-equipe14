@@ -3,17 +3,25 @@
 #
 #   - the web app records subscriptions, gets addresses verified while the
 #     account is in the SES sandbox, and sends test emails (../app/notifications.js);
-#   - the daily job sends the real alerts (../src/marketdata/jobs/price_alerts.py);
+#   - the daily job sends the real alerts (../src/marketdata/jobs/price-alerts.js);
 #     ../infra-batch gives its role the same send permission.
 #
-# alerts_sender_email must be an address someone on the team can read: SES
-# sends a verification link to it once (one identity per environment; use
-# plus-addressing, e.g. team+youcef@gmail.com, to reuse one inbox). Without
-# it, alerts are disabled in this environment.
+# Sender: the team mailbox, one address per environment so each one has its
+# own SES identity (an identity is account-wide: two workspaces can't own the
+# same address). Plus-addressing keeps a single inbox:
+#   prod -> datathon2026.equipe14@gmail.com, youcef -> datathon2026.equipe14+youcef@gmail.com
+# SES emails a verification link to it once, after the first apply: someone
+# with access to the team mailbox must click it, or nothing is sent.
 # ---------------------------------------------------------------------------
 
+variable "alerts_enabled" {
+  description = "Send price-move alerts by email (SES) in this environment."
+  type        = bool
+  default     = true
+}
+
 variable "alerts_sender_email" {
-  description = "Sender of the price alerts (SES identity, verified once by email). null = alerts disabled."
+  description = "Override the sender of the price alerts (default: the team mailbox, + the environment name outside prod)."
   type        = string
   default     = null
 
@@ -24,13 +32,17 @@ variable "alerts_sender_email" {
 }
 
 locals {
-  alerts_enabled = var.alerts_sender_email != null
+  alerts_enabled = var.alerts_enabled
+  alerts_sender = coalesce(
+    var.alerts_sender_email,
+    local.is_prod ? "datathon2026.equipe14@gmail.com" : "datathon2026.equipe14+${local.env}@gmail.com",
+  )
   ses_identities = "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/*"
 }
 
 resource "aws_sesv2_email_identity" "alerts_sender" {
   count          = local.alerts_enabled ? 1 : 0
-  email_identity = var.alerts_sender_email
+  email_identity = local.alerts_sender
 }
 
 # Every alert goes through this set: TLS required, and addresses that bounce
@@ -57,7 +69,7 @@ resource "aws_ssm_parameter" "alerts_sender" {
   count = local.alerts_enabled ? 1 : 0
   name  = "/${local.prefix}/alerts/sender"
   type  = "String"
-  value = var.alerts_sender_email
+  value = local.alerts_sender
 }
 
 # The web app: send from the alerts address only, through the alerts set, and
@@ -72,7 +84,7 @@ data "aws_iam_policy_document" "web_alerts" {
     condition {
       test     = "StringEquals"
       variable = "ses:FromAddress"
-      values   = [var.alerts_sender_email]
+      values   = [local.alerts_sender]
     }
   }
 
