@@ -8,9 +8,11 @@
     "@anthropic-ai/bedrock-sdk": "^1.1.2",
     "@aws-sdk/client-bedrock-agent": "^3.1169.0",
     "@aws-sdk/client-bedrock-agentcore": "^3.1169.0",
+    "@aws-sdk/client-comprehend": "^3.1169.0",
     "@aws-sdk/client-s3": "^3.1169.0",
     "@aws-sdk/client-secrets-manager": "^3.1169.0",
     "@aws-sdk/client-sesv2": "^3.1169.0",
+    "fast-xml-parser": "^5.12.1",
     "pg": "^8.23.1",
     "yahoo-finance2": "^4.0.6"
   }

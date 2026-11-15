@@ -20,7 +20,7 @@ const FX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // Devises cotées en centièmes par Yahoo (ex. GBp = pence).
 const SUBUNITS = { GBp: ['GBP', 100], GBX: ['GBP', 100], ZAc: ['ZAR', 100], ILA: ['ILS', 100] };
 
-// Fictional news (prototype), tied to the client's stocks or their sectors.
+// Sample news, only used without a database (real news: app/news.js).
 // hoursAgo keeps them recent relative to the current time.
 const NEWS = [
   { hoursAgo: 2, sector: 'Finance', symbols: ['RY'], source: 'Fil financier',
@@ -110,7 +110,9 @@ function fakeHistory(total, prevTotal) {
   return days.map((date, i) => ({ date, value: round2(values[i]) })).reverse();
 }
 
-function createPortfolioService({ store, stocks, log = console, random = Math.random, now = Date.now }) {
+function createPortfolioService({
+  store, stocks, news = null, log = console, random = Math.random, now = Date.now,
+}) {
   const quotes = new Map(); // `${symbol}|${maxAgeMs}` -> { at, promise }
 
   function quote(symbol, maxAgeMs = Infinity) {
@@ -199,10 +201,24 @@ function createPortfolioService({ store, stocks, log = console, random = Math.ra
       },
       holdings: holdings.sort((a, b) => b.marketValue - a.marketValue),
       history: fakeHistory(total, total - dayChange),
-      news: NEWS.map(({ hoursAgo, ...n }) => ({
-        ...n,
-        publishedAt: new Date(now() - hoursAgo * 3600e3).toISOString(),
-      })),
+      news: await portfolioNews(holdings),
+    };
+  }
+
+  // Vraies news (base de données) quand elles sont disponibles, sinon les
+  // exemples. Une panne des news ne doit pas empêcher d'afficher le portefeuille.
+  async function portfolioNews(holdings) {
+    if (news?.enabled) {
+      try {
+        return { real: true, items: await news.forHoldings(holdings) };
+      } catch (err) {
+        log.error('news error:', err.message);
+        return { real: true, items: [], error: 'Actualités indisponibles pour le moment' };
+      }
+    }
+    return {
+      real: false,
+      items: NEWS.map(({ hoursAgo, ...n }) => ({ ...n, publishedAt: new Date(now() - hoursAgo * 3600e3).toISOString() })),
     };
   }
 

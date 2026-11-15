@@ -63,3 +63,10 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "news_schedule_expression" {
+  description = "When the news job runs, in schedule_timezone. Default: every 2 hours, 7:00 to 23:00."
+  type        = string
+  default     = "cron(0 7-23/2 * * ? *)"
+}
+

@@ -166,7 +166,18 @@
   // -------------------------------------------------------------------------
 
   const relTime = new Intl.RelativeTimeFormat('fr-CA', { numeric: 'auto' });
-  const news = { items: [], names: {}, sector: null };
+  const news = { items: [], names: {}, sector: null, real: false, error: null };
+  const SENTIMENTS = {
+    POSITIVE: ['Ton positif', 'pos'], NEGATIVE: ['Ton négatif', 'neg'], NEUTRAL: ['Ton neutre', 'neu'], MIXED: ['Ton mitigé', 'mix'],
+  };
+  const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : null);
+
+  function linkReason(symbol, reason) {
+    const name = news.names[symbol] || symbol;
+    if (reason === 'yahoo') return `${name} : article lié à ce titre par Yahoo Finance`;
+    if (reason?.startsWith('comprehend:')) return `${name} : « ${reason.slice(11)} » est mentionné (détecté par Amazon Comprehend)`;
+    return name;
+  }
 
   function ago(iso) {
     const h = Math.round((Date.now() - Date.parse(iso)) / 3600e3);
@@ -182,18 +193,37 @@
       return b;
     }));
 
+    $('news-note').textContent = news.real
+      ? 'Sources : CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch et Yahoo Finance, '
+        + 'dans leur langue d’origine. Le ton est détecté automatiquement par Amazon Comprehend : un indice, pas un avis. '
+        + 'Cliquez sur un titre pour lire l’article chez l’éditeur.'
+      : 'Actualités fictives (prototype).';
+
     const items = news.items.filter((n) => !news.sector || n.sector === news.sector);
+    if (!items.length) {
+      $('news').replaceChildren(el('li', { class: 'news-item muted' }, news.error || 'Aucune actualité récente pour vos titres.'));
+      return;
+    }
     $('news').replaceChildren(...items.map((n) => {
       const li = el('li', { class: 'news-item' });
       const tags = el('div', { class: 'tags' });
       tags.append(el('span', { class: 'tag sector' }, n.sector));
-      for (const sym of n.symbols) tags.append(el('span', { class: 'tag', title: news.names[sym] || sym }, sym));
-      li.append(
-        tags,
-        el('h3', {}, n.title),
-        el('p', {}, n.summary),
-        el('span', { class: 'meta' }, `${n.source} · ${ago(n.publishedAt)}`),
-      );
+      const reasons = new Map((n.links || []).map((l) => [l.symbol, l.reason]));
+      for (const sym of n.symbols) tags.append(el('span', { class: 'tag', title: linkReason(sym, reasons.get(sym)) }, sym));
+      const s = SENTIMENTS[n.sentiment];
+      if (s) {
+        const conf = n.sentimentScore == null ? '' : ` (confiance ${Math.round(n.sentimentScore * 100)} %)`;
+        tags.append(el('span', { class: `tag sentiment ${s[1]}`, title: `Détecté par Amazon Comprehend${conf}` }, s[0]));
+      }
+      if (n.language === 'en') tags.append(el('span', { class: 'tag lang', title: 'Article en anglais' }, 'EN'));
+
+      const h3 = el('h3');
+      const url = safeUrl(n.url);
+      if (url) h3.append(el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, n.title));
+      else h3.textContent = n.title;
+      li.append(tags, h3);
+      if (n.summary) li.append(el('p', {}, n.summary));
+      li.append(el('span', { class: 'meta' }, `${n.source} · ${ago(n.publishedAt)}`));
       return li;
     }));
   }
@@ -457,7 +487,9 @@
     renderSummary(data);
     holdings.items = data.holdings;
     renderHoldings();
-    news.items = data.news || [];
+    news.items = data.news?.items || [];
+    news.real = Boolean(data.news?.real);
+    news.error = data.news?.error || null;
     news.names = Object.fromEntries(data.holdings.map((h) => [h.symbol, h.name]));
     renderNews();
     chart.history = data.history;

@@ -17,6 +17,7 @@ const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
 const { createMacroLookup } = require('./macro');
 const { createNotificationsFromEnv, NotificationError } = require('./notifications');
+const { createNewsService } = require('./news');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -57,7 +58,7 @@ const chats = createChatStore({ db, saveDb });
 const stocks = createStockLookup();
 const macro = createMacroLookup();
 const portfolioStore = createPortfolioStore({ db, saveDb });
-const portfolios = createPortfolioService({ store: portfolioStore, stocks });
+const portfolios = createPortfolioService({ store: portfolioStore, stocks, news: createNewsService({ pool: profiles.pool }) });
 
 // Alertes de prix par courriel (SES) : actives seulement avec Postgres et ALERTS_SENDER.
 const notifications = createNotificationsFromEnv({ pool: profiles.pool });

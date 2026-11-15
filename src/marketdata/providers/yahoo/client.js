@@ -107,6 +107,26 @@ class YahooClient {
     };
   }
 
+  // Latest news Yahoo links to a symbol: [{ id, title, publisher, url,
+  // publishedAt (Date), relatedSymbols }]. Unknown symbols give no news.
+  async news(symbol, count = 5) {
+    let result;
+    try {
+      result = await this.#call(symbol, (lib) => lib.search(symbol, { quotesCount: 0, newsCount: count }));
+    } catch (err) {
+      if (err.notFound) return [];
+      throw err;
+    }
+    return (result.news || []).map((n) => ({
+      id: n.uuid,
+      title: n.title,
+      publisher: n.publisher,
+      url: n.link,
+      publishedAt: n.providerPublishTime instanceof Date ? n.providerPublishTime : new Date(n.providerPublishTime),
+      relatedSymbols: n.relatedTickers || [],
+    }));
+  }
+
   #summary(symbol) {
     const at = this.now();
     if (this.cached && this.cached.symbol === symbol && at - this.cached.at < SUMMARY_TTL_MS) {

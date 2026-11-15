@@ -93,3 +93,43 @@ DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
 This job allows 60 Yahoo calls a minute (the daily job: 30), so 1000 companies
 take about 17 minutes;
 `--skip-existing` resumes an interrupted run.
+
+### News (RSS feeds of known media + Yahoo Finance, Amazon Comprehend)
+
+`jobs/news-refresh.js` runs every 2 hours on AWS Batch and fills `news_items`
+and `news_item_symbols` (migration V10). The dashboard shows the articles about
+the user's holdings first (why each one is linked is in the tag's tooltip), then
+general business news.
+
+| Source | Language | What we keep | Terms |
+| --- | --- | --- | --- |
+| CBC Business (RSS) | en | title, excerpt, link | https://www.cbc.ca/rss/ |
+| Radio-Canada Économie (RSS) | fr | title, excerpt, link | https://ici.radio-canada.ca/rss |
+| The Globe and Mail, Business (RSS) | en | title, excerpt, link | https://www.theglobeandmail.com/about/rss/ |
+| MarketWatch, Top Stories (RSS) | en | title, excerpt, link | https://www.marketwatch.com/site/rss |
+| Yahoo Finance (news per held symbol, `yahoo-finance2`) | en | title, publisher, link, related tickers | Yahoo terms of service |
+
+- **Original language**: articles are not translated.
+- **Only headlines and short excerpts** (400 characters max) are stored, always
+  with the source name and a link to the publisher's page: what the feeds allow
+  for aggregators. No full text. Articles older than 30 days are deleted.
+- **Amazon Comprehend** (batches of 25, once per article): dominant sentiment
+  with its confidence (shown as an indication, not an opinion), and the
+  organizations named in the article. `news/match.js` links them to
+  `company_profiles` (legal forms and accents ignored, a few Canadian aliases:
+  RBC, TD, BMO, Banque Nationale...; conservative: "Bank of Canada" never matches
+  Royal Bank of Canada). Yahoo articles are also linked through the tickers
+  Yahoo gives.
+- **Why both**: Yahoo covers US stocks well but has almost nothing for TSX
+  listings (none for RY.TO when tested); the Canadian media feeds fill that gap.
+- **Cost**: only new articles are enriched (at most 150 per run). Comprehend
+  bills units of 100 characters (3 minimum) per document and per API: about
+  10 units per article, so about $0.001 per article. With ~20 new articles per
+  run and 9 runs a day, about $0.20 a day; the first run (~150 articles) about $0.15.
+- Feeds and tickers are untrusted input: size and time limits, HTML stripped,
+  only http(s) links, rendered with `textContent` and `rel="noopener noreferrer"`.
+
+```bash
+DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata \
+    node src/marketdata/jobs/news-refresh.js   # needs AWS credentials for Comprehend
+```

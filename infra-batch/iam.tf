@@ -59,6 +59,14 @@ data "aws_iam_policy_document" "job" {
     resources = [local.db_secret_arn]
   }
 
+  # News job: sentiment and organizations of new articles. Comprehend's
+  # detect APIs have no resource-level permissions.
+  statement {
+    sid       = "AnalyzeNews"
+    actions   = ["comprehend:BatchDetectSentiment", "comprehend:BatchDetectEntities"]
+    resources = ["*"]
+  }
+
   # Send the price alerts, from the alerts address only (see ../infra/ses.tf).
   dynamic "statement" {
     for_each = local.alerts_sender != "" ? [1] : []
@@ -108,7 +116,7 @@ resource "aws_iam_role" "scheduler" {
 
 data "aws_iam_policy_document" "scheduler" {
   statement {
-    sid     = "SubmitDailyRefresh"
+    sid     = "SubmitScheduledJobs" # daily refresh and news refresh (same job definition)
     actions = ["batch:SubmitJob"]
     resources = [
       aws_batch_job_queue.main.arn,
