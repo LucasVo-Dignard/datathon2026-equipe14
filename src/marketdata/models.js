@@ -159,28 +159,6 @@ const fundComposition = model('FundComposition', ['symbol', 'provider', 'quoteTy
 const FUND_TYPES = new Set(['ETF', 'MUTUALFUND']);
 const isFund = (c) => FUND_TYPES.has(c?.quoteType);
 
-// One yearly value of a macroeconomic indicator for a country or region.
-// `country` is an ISO 3166-1 alpha-3 code ("CAN") or a provider aggregate
-// ("WLD" for the world, "EMU" for the euro area). Exception to the fraction
-// rule above: `value` is as published, in the indicator's own unit (2.1 for
-// "GDP growth (annual %)"), because one table holds indicators of every
-// unit; `indicatorName` says which.
-//
-// Provenance: `provider` is the API we called; `dataset` is the provider's
-// database ("World Development Indicators"); `sourceOrganization` is who
-// originally produced the numbers (e.g. the IMF); `sourceUpdatedOn` is when
-// the provider last updated the data ("YYYY-MM-DD"); `sourceUrl` is a page
-// where a person can check the value.
-const macroObservation = model('MacroObservation', ['country', 'indicator', 'year', 'value', 'provider'], {
-  countryName: null,
-  indicatorName: null,
-  dataset: null,
-  sourceOrganization: null,
-  sourceUpdatedOn: null,
-  sourceUrl: null,
-  fetchedAt: now,
-});
-
 module.exports = {
   companyProfile,
   priceBar,
@@ -194,5 +172,4 @@ module.exports = {
   analystRatingAction,
   fundComposition,
   isFund,
-  macroObservation,
 };

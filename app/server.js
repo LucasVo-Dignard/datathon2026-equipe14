@@ -21,7 +21,6 @@ const { importJson, hasJsonData } = require('./json-import');
 const { createPortfolioStore } = require('./portfolio-store');
 const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
-const { createMacroLookup } = require('./macro');
 const { createNotificationsFromEnv, NotificationError } = require('./notifications');
 const { createNewsService } = require('./news');
 
@@ -64,7 +63,6 @@ const profiles = createProfileStore({ db, saveDb });
 // Conversations du chat : idem (tables chats / chat_messages).
 const chats = createChatStore({ db, saveDb });
 const stocks = createStockLookup();
-const macro = createMacroLookup();
 const portfolioStore = createPortfolioStore({ db, saveDb });
 const portfolios = createPortfolioService({ store: portfolioStore, stocks, news: createNewsService({ pool: profiles.pool }) });
 // Rapports simulés : bucket S3 si REPORTS_BUCKET est défini, sinon le fichier JSON.
@@ -284,15 +282,6 @@ async function handleApi(req, res, pathname) {
     return sendJson(res, 200, { ok: true });
   }
 
-  if (pathname === '/api/macro' && method === 'GET') {
-    try {
-      return sendJson(res, 200, await macro.overview());
-    } catch (err) {
-      console.error('macro error:', err.message);
-      throw new HttpError(502, 'Données macroéconomiques indisponibles, réessayez plus tard');
-    }
-  }
-
   const stockMatch = pathname.match(/^\/api\/stocks\/([^/]+)$/);
   if (stockMatch && method === 'GET') {
     let raw;
@@ -432,7 +421,6 @@ const STATIC = {
   '/profile-ui.js': ['profile-ui.js', 'text/javascript; charset=utf-8'],
   '/notifications-ui.js': ['notifications-ui.js', 'text/javascript; charset=utf-8'],
   '/stock-search.js': ['stock-search.js', 'text/javascript; charset=utf-8'],
-  '/macro.js': ['macro.js', 'text/javascript; charset=utf-8'],
   '/reports.js': ['reports.js', 'text/javascript; charset=utf-8'],
   '/intro.js': ['intro.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json; charset=utf-8'],

@@ -38,7 +38,9 @@ async function showApp(username) {
   $('login-view').hidden = true;
   $('app-view').hidden = false;
   $('account-name').textContent = username;
-  const savedTab = sessionStorage.getItem('tab');
+  // Ignore a tab that no longer exists (e.g. the removed Macro tab).
+  const savedTab = [...document.querySelectorAll('button[data-tab]')].some((b) => b.dataset.tab === sessionStorage.getItem('tab'))
+    ? sessionStorage.getItem('tab') : null;
   if (savedTab) $('app-view').dataset.tab = savedTab; // avoid flashing the default tab while loading
   window.Dashboard.load();
   const [chats, hasProfile] = await Promise.all([
@@ -62,7 +64,6 @@ function setTab(tab) {
     b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   }
   if (tab === 'portfolio') window.Dashboard.redraw();
-  else if (tab === 'macro') window.Macro.load();
   else if (tab === 'reports') window.Reports.load();
   else scrollMessages();
 }

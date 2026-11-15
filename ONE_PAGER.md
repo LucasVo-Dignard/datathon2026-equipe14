@@ -39,9 +39,8 @@ comme pour une personne tentée par un titre très médiatisé, peut leur nuire.
 
 ### Sources de données
 Uniquement des données publiques, récupérées à la demande et horodatées :
-- **Marchés** : Yahoo Finance (cours ajustés, fondamentaux, analystes, FNB, change),
-  Finnhub et companiesmarketcap.com (environ 1 000 sociétés suivies).
-- **Macroéconomie** : Banque mondiale, avec la provenance de chaque valeur.
+- **Marchés** : Yahoo Finance (cours ajustés, fondamentaux, analystes, FNB, change)
+  et companiesmarketcap.com (environ 1 000 sociétés suivies).
 - **Documents officiels** : SEC EDGAR (communiqués de résultats) et Bigdata.com.
 - **Actualité** : CBC, Radio-Canada, The Globe and Mail et MarketWatch (titres et
   liens seulement, conformément à leurs conditions).

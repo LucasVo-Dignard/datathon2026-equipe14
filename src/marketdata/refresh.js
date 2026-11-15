@@ -95,25 +95,4 @@ async function refresh(db, symbols, steps, { log = console, track = true } = {})
   return report;
 }
 
-// Fetch each indicator for all `countries` and save it, one transaction per
-// indicator. The fetch happens outside the transaction, since the World Bank
-// can take a while to answer. Same report shape as refresh().
-async function refreshMacro(db, fetcher, { indicators, countries, years, log = console }) {
-  const report = { succeeded: 0, failed: 0, failures: {} };
-  for (const indicator of indicators) {
-    try {
-      const observations = await fetcher.fetch(indicator, countries, years);
-      await transaction(db, (tx) => repo.saveMacroObservations(tx, observations));
-      report.succeeded++;
-      log.info(`${indicator}: ${observations.length} observations saved`);
-    } catch (err) {
-      report.failed++;
-      report.failures[indicator] = err;
-      log.warn(`${indicator} failed: ${err.message}`);
-    }
-  }
-  report.nothingSucceeded = report.succeeded === 0 && report.failed > 0;
-  return report;
-}
-
-module.exports = { yahooSteps, finnhubSteps, defaultSteps, newYahooClient, refresh, refreshMacro, LOOKBACK_DAYS };
+module.exports = { yahooSteps, finnhubSteps, defaultSteps, newYahooClient, refresh, LOOKBACK_DAYS };

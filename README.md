@@ -112,7 +112,6 @@ données de départ du cas n'est pas utilisé. Chaque valeur garde sa source et 
 | Source | Données | Accès | Où |
 | --- | --- | --- | --- |
 | **Yahoo Finance** (`yahoo-finance2`) | Cours quotidiens ajustés, profils, indicateurs, objectifs et notes d'analystes, compositions de FNB, taux de change (`USDCAD=X`), news par titre | Sans clé. Débit limité à 30 appels/min dans le job | `src/marketdata/providers/yahoo/` |
-| **Banque mondiale** | Indicateurs macroéconomiques annuels, avec leur provenance | API publique, sans clé | `src/marketdata/providers/worldbank/` |
 | **companiesmarketcap.com** | Classement mondial des capitalisations (≈ 1 000 sociétés suivies) | CSV public | `src/marketdata/providers/companiesmarketcap/` |
 | **CBC Business, Radio-Canada Économie, The Globe and Mail, MarketWatch** | Titres, extraits de 400 caractères au plus, liens, dans leur langue d'origine | Flux RSS publics. On ne garde que le titre, l'extrait et le lien vers l'éditeur | `src/marketdata/news/feeds.js` |
 | **SEC EDGAR** | Communiqués de résultats (8-K, pièce 99.1), versés dans la base de connaissances de l'agent | Public | `agents/knowledge-base/` |
@@ -199,7 +198,7 @@ npm start                      # http://localhost:3000, données dans app/data/d
 ```
 
 Ce qui fonctionne : la connexion, le profil, un portefeuille aléatoire avec de
-vrais cours Yahoo et la page Macro. Ce qui demande AWS ou une base : les vraies
+vrais cours Yahoo. Ce qui demande AWS ou une base : les vraies
 news (sans base, ce sont des exemples), les alertes, l'assistant et la rédaction
 des rapports (Bedrock). `npm run dev` charge `.env-aws` et `.env-dev` s'ils existent,
 et redémarre l'app à chaque modification.
