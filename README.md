@@ -57,10 +57,11 @@ peu de temps ou peu de connaissances en placement. Il comprend :
 | **RDS PostgreSQL 17** | Données de marché, profils, portefeuilles, conversations, alertes, news. Base privée |
 | **Secrets Manager** | Mot de passe de RDS, généré et renouvelé par RDS, et lu au démarrage par le serveur et par les jobs sans jamais être écrit sur disque. Clé API Bigdata.com de l'agent de recherche |
 | **AWS Batch (Fargate)** + **EventBridge Scheduler** | Mise à jour quotidienne des données et des alertes, et des news toutes les 2 h |
-| **Amazon Bedrock** + **Bedrock AgentCore** | Agent conversationnel (Claude), recherche, base de connaissances (communiqués de résultats), relecture |
+| **Amazon Bedrock** + **Bedrock AgentCore** | Agent conversationnel (Claude), agent de recherche, relecture |
+| **Amazon Bedrock Knowledge Bases** | Base de connaissances de l'agent de recherche : communiqués de résultats (SEC EDGAR) et rapports de recherche déjà produits, filtrables par titre. Les documents sources sont dans S3 |
 | **Amazon Comprehend** | Ton des articles et sociétés nommées, pour rattacher les news aux titres |
 | **Amazon SES** | Alertes de prix par courriel |
-| **S3** | État Terraform, rapports, paquets de migration, base de connaissances. Tous privés |
+| **S3** | État Terraform, rapports, paquets de migration. Tous privés |
 
 L'infrastructure est décrite en Terraform, dans trois stacks : `infra/` (réseau, EC2, ECR,
 SES, S3), `infra-db/` (RDS) et `infra-batch/` (jobs). Il existe **un environnement
