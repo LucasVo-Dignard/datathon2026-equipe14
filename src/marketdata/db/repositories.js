@@ -159,7 +159,7 @@ async function saveMacroObservations(db, observations) {
 // was fetched, to decide whether the data is stale.
 async function latestQuote(db, symbol) {
   const { rows: [profile] } = await db.query(
-    `SELECT name, exchange, currency FROM company_profiles
+    `SELECT name, exchange, currency, sector FROM company_profiles
       WHERE symbol = $1 ORDER BY fetched_at DESC LIMIT 1`, [symbol]);
   const { rows: bars } = await db.query(
     `SELECT to_char(date, 'YYYY-MM-DD') AS date, close::float8 AS close, currency, provider, fetched_at
@@ -170,6 +170,7 @@ async function latestQuote(db, symbol) {
     name: profile?.name || symbol,
     exchange: profile?.exchange || null,
     currency: bars[0].currency || profile?.currency || null,
+    sector: profile?.sector || null,
     price: bars[0].close,
     prevClose: bars[1]?.close ?? null,
     asOf: bars[0].date,

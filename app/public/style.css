@@ -188,6 +188,38 @@ h1, h2, h3 { margin: 0; }
 .table button.symbol:hover { text-decoration: underline; }
 .table .name { display: block; color: var(--text-2); font-size: 0.8rem; }
 .table .block { display: block; }
+.table .row-actions { width: 1%; text-align: right; padding-left: 0; }
+.row-edit { padding: 4px 8px; }
+.table tr.editing td { background: var(--navy-tint); }
+
+/* Portfolio setup + holdings forms */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.setup h2 { font-size: 1.15rem; margin-bottom: 6px; }
+.setup > p { margin: 0 0 12px; }
+.setup-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.setup-option {
+  display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 16px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel); line-height: 1.4;
+}
+.setup-option:hover { border-color: var(--accent); }
+.setup-option:disabled { opacity: 0.6; cursor: progress; }
+.holding-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.table .holding-form { margin-top: 0; }
+.holding-form label { font-weight: 600; font-size: 0.9rem; }
+.holding-form input {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.9rem;
+  min-width: 0; width: 140px; background: var(--panel);
+}
+.holding-form input:focus { outline: none; border-color: var(--accent); }
+.holding-form button { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); }
+.holding-form button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.holding-form button.secondary:hover { background: var(--hover); }
+.holding-form button.danger { color: var(--down); }
+.holding-form button:disabled { opacity: 0.6; cursor: progress; }
+#holdings-error { margin-top: 8px; }
 
 /* -------------------------------------------------------------- Tabs */
 .top-tabs { display: flex; gap: 4px; margin-right: auto; margin-left: 16px; }

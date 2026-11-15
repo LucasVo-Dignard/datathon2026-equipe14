@@ -50,7 +50,25 @@
       <main id="dashboard" class="dashboard" aria-label="Portefeuille">
         <p id="dash-error" class="error" role="alert"></p>
 
-        <section class="overview card">
+        <!-- First visit: how to start the portfolio -->
+        <section id="portfolio-setup" class="card setup" hidden>
+          <h2>Créez votre portefeuille</h2>
+          <p class="muted">Ce portefeuille est simulé : aucune transaction réelle n’est effectuée. Comment voulez-vous commencer ?</p>
+          <div class="setup-options">
+            <button type="button" class="setup-option" data-mode="random">
+              <strong>Générer un portefeuille aléatoire</strong>
+              <span class="muted small">Quelques titres tirés au hasard parmi ceux suivis dans notre base, avec des quantités et des coûts d’achat fictifs.</span>
+            </button>
+            <button type="button" class="setup-option" data-mode="custom">
+              <strong>Composer mon propre portefeuille</strong>
+              <span class="muted small">Partez d’un portefeuille vide et ajoutez vos titres un à un, avec la quantité de votre choix.</span>
+            </button>
+          </div>
+          <p id="setup-status" class="muted small" role="status"></p>
+          <p id="setup-error" class="error" role="alert"></p>
+        </section>
+
+        <section class="overview card dash-section">
           <div class="hero">
             <span class="label">Valeur totale</span>
             <span id="total-value" class="hero-value">—</span>
@@ -75,7 +93,7 @@
           </div>
         </section>
 
-        <section class="card">
+        <section class="card dash-section">
           <div class="card-head">
             <div>
               <h2>Performance</h2>
@@ -100,7 +118,7 @@
           </details>
         </section>
 
-        <section class="card">
+        <section class="card dash-section">
           <div class="card-head">
             <div>
               <h2>Actualités</h2>
@@ -112,7 +130,7 @@
           <p class="muted small">Actualités fictives (prototype).</p>
         </section>
 
-        <section class="card">
+        <section class="card dash-section">
           <div class="card-head"><h2>Mes actions</h2></div>
           <div class="table-wrap">
             <table id="holdings" class="table">
@@ -125,12 +143,21 @@
                   <th class="num">Valeur</th>
                   <th class="num">Gain/perte</th>
                   <th class="num opt">Poids</th>
+                  <th class="row-actions"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
-          <p class="muted small">Données fictives (prototype), en dollars canadiens.</p>
+          <form id="add-holding" class="holding-form">
+            <input id="add-symbol" placeholder="Symbole (ex. RY.TO)" aria-label="Symbole à ajouter" maxlength="15"
+                   autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+            <input id="add-quantity" type="number" min="0.0001" step="any" inputmode="decimal" placeholder="Quantité"
+                   aria-label="Quantité" required>
+            <button type="submit" class="primary">Ajouter</button>
+          </form>
+          <p id="holdings-error" class="error" role="alert"></p>
+          <p class="muted small">Derniers cours connus, convertis en dollars canadiens. Coûts d’achat simulés (prototype).</p>
         </section>
       </main>
 

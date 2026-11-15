@@ -26,13 +26,31 @@ function normalizeSymbol(value) {
   return SYMBOL_RE.test(symbol) ? symbol : null;
 }
 
-function toQuote({ symbol, name, exchange, currency, price, prevClose, asOf, provider }) {
+// Sans base de données, le portefeuille aléatoire pioche dans cette liste
+// (la liste de départ de tracked_symbols, migration V3).
+const FALLBACK_SYMBOLS = [
+  'RY.TO', 'TD.TO', 'BNS.TO', 'BMO.TO', 'CM.TO', 'NA.TO', 'MFC.TO', 'SLF.TO', 'ENB.TO', 'TRP.TO',
+  'CNQ.TO', 'SU.TO', 'CP.TO', 'CNR.TO', 'SHOP.TO', 'CSU.TO', 'ATD.TO', 'BCE.TO', 'T.TO', 'ABX.TO',
+  'NTR.TO', 'WCN.TO', 'BN.TO', 'L.TO', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META',
+];
+
+function shuffled(items) {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function toQuote({ symbol, name, exchange, currency, sector, price, prevClose, asOf, provider }) {
   const change = prevClose == null ? null : price - prevClose;
   return {
     symbol,
     name,
     exchange: exchange || null,
     currency: currency || null,
+    sector: sector || null,
     price,
     change,
     changePct: change == null || !prevClose ? null : change / prevClose,
@@ -57,9 +75,11 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     }
   }
 
-  async function lookup(symbol) {
+  // maxAgeMs: Infinity accepte n'importe quel cours en base (le portefeuille
+  // s'en contente : les titres suivis sont rafraîchis chaque jour par le batch).
+  async function lookup(symbol, { maxAgeMs = STALE_MS } = {}) {
     const cached = await repo.latestQuote(pool, symbol);
-    if (cached && now() - cached.fetchedAt.getTime() < STALE_MS) return toQuote(cached);
+    if (cached && now() - cached.fetchedAt.getTime() < maxAgeMs) return toQuote(cached);
 
     if (!loading.has(symbol)) {
       loading.set(symbol, load(symbol, !cached).finally(() => loading.delete(symbol)));
@@ -76,7 +96,21 @@ function createDbLookup({ connectionString, yahooClient, now, log }) {
     return fresh ? toQuote(fresh) : null;
   }
 
-  return { lookup, close: () => pool.end() };
+  // Titres suivis au hasard : d'abord ceux qui ont déjà un cours en base (pas
+  // d'appel à Yahoo pour les valoriser), en CAD ou USD de préférence.
+  async function randomSymbols(count) {
+    const { rows } = await pool.query(
+      `SELECT t.symbol
+         FROM tracked_symbols t
+         LEFT JOIN LATERAL (SELECT currency FROM price_bars p WHERE p.symbol = t.symbol
+                             ORDER BY date DESC LIMIT 1) last ON true
+        WHERE t.active
+        ORDER BY (last.currency IS NOT NULL) DESC, (last.currency IN ('CAD', 'USD')) DESC, random()
+        LIMIT $1`, [count]);
+    return rows.length ? rows.map((r) => r.symbol) : shuffled(FALLBACK_SYMBOLS).slice(0, count);
+  }
+
+  return { lookup, randomSymbols, close: () => pool.end() };
 }
 
 function createLiveLookup({ yahooClient }) {
@@ -99,6 +133,7 @@ function createLiveLookup({ yahooClient }) {
       name: profile.name,
       exchange: profile.exchange,
       currency: last.currency || profile.currency,
+      sector: profile.sector,
       price: last.close,
       prevClose: prev?.close ?? null,
       asOf: last.date,
@@ -106,7 +141,11 @@ function createLiveLookup({ yahooClient }) {
     });
   }
 
-  return { lookup, close: async () => {} };
+  return {
+    lookup,
+    randomSymbols: async (count) => shuffled(FALLBACK_SYMBOLS).slice(0, count),
+    close: async () => {},
+  };
 }
 
 function createStockLookup({

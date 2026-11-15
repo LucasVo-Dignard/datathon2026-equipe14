@@ -9,7 +9,8 @@ const crypto = require('node:crypto');
 const { reply } = require('./bot');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
-const { getPortfolio } = require('./portfolio');
+const { createPortfolioStore } = require('./portfolio-store');
+const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
 const { createMacroLookup } = require('./macro');
 
@@ -49,6 +50,8 @@ function saveDb() {
 const profiles = createProfileStore({ db, saveDb });
 const stocks = createStockLookup();
 const macro = createMacroLookup();
+const portfolioStore = createPortfolioStore({ db, saveDb });
+const portfolios = createPortfolioService({ store: portfolioStore, stocks });
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -127,6 +130,15 @@ function cleanText(value, max, field) {
   return text;
 }
 
+async function portfolioCall(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof PortfolioError) throw new HttpError(err.status, err.message);
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // API routes
 // ---------------------------------------------------------------------------
@@ -186,8 +198,30 @@ async function handleApi(req, res, pathname) {
     }
   }
 
-  if (pathname === '/api/portfolio' && method === 'GET') {
-    return sendJson(res, 200, getPortfolio(user));
+  if (pathname === '/api/portfolio') {
+    if (method === 'GET') return sendJson(res, 200, await portfolios.get(user));
+    // Premier choix de l'utilisateur : { mode: 'random' | 'custom' }.
+    if (method === 'POST') {
+      const { mode } = await readJson(req);
+      return sendJson(res, 201, await portfolioCall(() => portfolios.create(user, mode)));
+    }
+  }
+
+  const holdingMatch = pathname.match(/^\/api\/portfolio\/holdings\/([^/]+)$/);
+  if (holdingMatch) {
+    let raw;
+    try {
+      raw = decodeURIComponent(holdingMatch[1]);
+    } catch {
+      raw = '';
+    }
+    const symbol = normalizeSymbol(raw);
+    if (!symbol) throw new HttpError(400, 'Symbole invalide');
+    if (method === 'PUT') {
+      const { quantity } = await readJson(req);
+      return sendJson(res, 200, await portfolioCall(() => portfolios.setQuantity(user, symbol, quantity)));
+    }
+    if (method === 'DELETE') return sendJson(res, 200, await portfolios.remove(user, symbol));
   }
 
   if (pathname === '/api/macro' && method === 'GET') {
@@ -276,6 +310,10 @@ async function handleApi(req, res, pathname) {
         console.error('profile load error:', err.message);
         return null;
       });
+      const portfolio = await portfolios.get(user).catch((err) => {
+        console.error('portfolio load error:', err.message);
+        return null;
+      });
 
       let answer;
       try {
@@ -284,7 +322,7 @@ async function handleApi(req, res, pathname) {
           username: user,
           chatId: chat.id,
           profile: investorProfile,
-          portfolio: getPortfolio(user),
+          portfolio,
         });
       } catch (err) {
         console.error('bot error:', err);
@@ -350,10 +388,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-profiles.init().then(
-  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils : ${profiles.kind})`)),
+Promise.all([profiles.init(), portfolioStore.init()]).then(
+  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind})`)),
   (err) => {
-    console.error(`Impossible d'initialiser le stockage des profils (${profiles.kind}) :`, err.message || err.code || err);
+    console.error(`Impossible d'initialiser le stockage (${profiles.kind}) :`, err.message || err.code || err);
     process.exit(1);
   },
 );
