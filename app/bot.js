@@ -54,6 +54,8 @@ function getClient() {
   // Created on first use so the server starts even without AWS credentials.
   if (!client) {
     client = new AnthropicBedrockMantle({
+      // The EC2 container has no AWS_REGION set: default to the project's region.
+      awsRegion: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
       // Refusal fallback: Bedrock has no server-side `fallbacks` parameter,
       // so the SDK middleware retries a declined request on Claude Opus 4.8.
       middleware: [betaRefusalFallbackMiddleware([{ model: 'anthropic.claude-opus-4-8' }])],
