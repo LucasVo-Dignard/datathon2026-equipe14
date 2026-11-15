@@ -127,3 +127,15 @@ Storage (`reports-store.js`, last 20 reports per user):
   per report at `reports/<username>/<id>.json`. On the EC2, `scripts/deploy-app.sh`
   writes `REPORTS_BUCKET` into `/etc/chatbot.env` from the Terraform output.
 - **not set** → the prototype JSON file (`db.reports`), like conversations.
+
+## Price alerts by email
+
+`notifications.js` (API `/api/notifications`, card on the profile page) and the
+daily job `src/marketdata/jobs/price-alerts.js` (run after `daily-refresh.js`)
+email users when a stock **in their portfolio** moves by their threshold or more
+in one trading day. The threshold follows the risk level (2 % Faible … 7 % Élevé,
+4 % without a profile). Thresholds and the email format are shared in
+`src/marketdata/alerts.js`. Sent with Amazon SES (see `infra/README.md`); tables
+`notification_subscriptions` and `price_alerts_sent` (migration V8). Needs
+Postgres and `ALERTS_SENDER`, otherwise the card says alerts are unavailable.
+

@@ -15,8 +15,15 @@ systemctl enable --now docker
 # uid 1000 = the "node" user inside the image.
 install -d -o 1000 -g 1000 -m 700 /var/lib/chatbot
 
-# Extra environment for the container, set by hand if needed. Not in Git.
+# Environment of the container (nothing secret: the DB password is handled by
+# chatbot-db-env below). Edit by hand and restart the service to override.
 install -m 600 /dev/null /etc/chatbot.env
+cat > /etc/chatbot.env <<'ENV'
+AWS_REGION=${region}
+ALERTS_SENDER=${alerts_sender}
+SES_CONFIGURATION_SET=${configuration_set}
+APP_URL=${app_url}
+ENV
 
 # Before each start: build DATABASE_URL for this environment's RDS database
 # (${db_identifier}) from its endpoint and the master secret in Secrets Manager.

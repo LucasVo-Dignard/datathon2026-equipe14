@@ -27,6 +27,17 @@ data "aws_db_instance" "main" {
   db_instance_identifier = "${local.prefix}-db"
 }
 
+# Price alerts (SES): the sender and the web server's address come from
+# ../infra (looked up by name, like the database), so apply ../infra first.
+# No sender parameter = alerts disabled in this environment.
+data "aws_ssm_parameters_by_path" "alerts" {
+  path = "/${local.prefix}/alerts"
+}
+
+data "aws_eip" "web" {
+  tags = { Name = "${local.prefix}-web" }
+}
+
 data "aws_security_group" "db" {
   vpc_id = data.aws_vpc.main.id
   name   = "${local.prefix}-db"
@@ -37,6 +48,14 @@ locals {
   db_port       = data.aws_db_instance.main.port
 
   schedule_enabled = var.schedule_enabled != null ? var.schedule_enabled : local.is_prod
+  refresh_enabled  = var.refresh_enabled != null ? var.refresh_enabled : local.is_prod
+  job_timeout      = var.job_timeout_seconds != null ? var.job_timeout_seconds : (local.is_prod ? 14400 : 1800)
+
+  alerts_sender = try(
+    data.aws_ssm_parameters_by_path.alerts.values[index(data.aws_ssm_parameters_by_path.alerts.names, "/${local.prefix}/alerts/sender")],
+    "",
+  )
+  alerts_configuration_set = "${local.prefix}-alerts" # created with the sender in ../infra/ses.tf
 }
 
 # ---------------------------------------------------------------------------

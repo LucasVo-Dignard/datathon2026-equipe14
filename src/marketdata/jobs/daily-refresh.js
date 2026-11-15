@@ -14,6 +14,10 @@
 //
 // Finnhub steps run only if FINNHUB_API_KEY is set.
 //
+// When ALERTS_SENDER is set, price-move alerts are emailed (SES) after the
+// refresh (price-alerts.js), and the subscribers' holdings are refreshed too.
+// An alert failure is logged but never fails the job.
+//
 // REFRESH_ENABLED=false turns the job into a no-op: it logs and exits 0
 // without connecting to the database or calling any provider. The AWS job
 // definition sets it from the refresh_enabled Terraform variable.
@@ -23,6 +27,7 @@ const { connect } = require('../db/connection');
 const repo = require('../db/repositories');
 const { defaultSteps, refresh } = require('../refresh');
 const { normalizeSymbol } = require('../values');
+const priceAlerts = require('./price-alerts');
 
 // On unless REFRESH_ENABLED is explicitly false/0/no/off.
 function refreshEnabled(env = process.env) {
@@ -49,13 +54,38 @@ async function main(argv = process.argv.slice(2), { env = process.env, log = def
 
   const db = await connectFn(env, { applicationName: 'marketdata-daily-refresh' });
   try {
-    const symbols = fromArgs ? fromArgs.map(normalizeSymbol) : await repo.activeSymbols(db);
+    let symbols = fromArgs ? fromArgs.map(normalizeSymbol) : await repo.activeSymbols(db);
+    // Subscribers' holdings go first, then the alerts are sent, then the rest:
+    // with ~1 000 tracked symbols the full refresh takes hours, and alerts
+    // must not depend on it finishing (timeout, retry, Yahoo throttling).
+    let first = [];
+    if (!fromArgs && env.ALERTS_SENDER) {
+      first = await priceAlerts.subscribedSymbols(db).catch((err) => {
+        log.warn(`subscribers' holdings unavailable: ${err.message}`);
+        return [];
+      });
+      symbols = [...new Set([...first, ...symbols])];
+    }
     if (!symbols.length) {
       log.warn('no active tracked symbols: nothing to do');
       return 0;
     }
-    log.info(`refreshing ${symbols.length} symbols`);
-    const report = await refresh(db, symbols, steps || defaultSteps({ env, log }), { log });
+    const jobSteps = steps || defaultSteps({ env, log });
+    const firstSet = new Set(first);
+    const rest = symbols.filter((s) => !firstSet.has(s));
+    const report = { succeeded: 0, failed: 0 };
+    const add = (r) => { report.succeeded += r.succeeded; report.failed += r.failed; };
+
+    if (first.length) {
+      log.info(`refreshing ${first.length} subscribed symbols first (price alerts)`);
+      add(await refresh(db, first, jobSteps, { log }));
+    }
+    await priceAlerts.sendPriceAlerts(db, { env, log });
+    if (rest.length) {
+      log.info(`refreshing ${rest.length} symbols`);
+      add(await refresh(db, rest, jobSteps, { log }));
+    }
+    report.nothingSucceeded = report.succeeded === 0 && report.failed > 0;
     log.info(`finished: ${report.succeeded} steps ok, ${report.failed} failed`);
     return report.nothingSucceeded ? 1 : 0;
   } finally {

@@ -37,3 +37,8 @@ output "reports_bucket" {
   description = "Private S3 bucket of the simulated reports (REPORTS_BUCKET for the app)."
   value       = aws_s3_bucket.reports.bucket
 }
+
+output "alerts_sender_email" {
+  description = "Sender of the price alerts (SES identity, see ses.tf), or null if alerts are disabled."
+  value       = local.alerts_enabled ? local.alerts_sender : null
+}
