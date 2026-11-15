@@ -192,7 +192,7 @@ nouveau terminal, et après avoir renouvelé `.env-aws`.
 | Variable | Sans elle | Pour |
 | --- | --- | --- |
 | `DATABASE_URL` | tout est stocké dans `app/data/db.json` | Utiliser PostgreSQL (par exemple celui de Docker, voir plus bas) |
-| `RESEARCH_ENV` | pas de recherche | Utiliser les agents de recherche de cet environnement (voir [Agents](#agents)) |
+| `RESEARCH_ENV` | pas de recherche | En local seulement : environnement dont l'app utilise les agents de recherche (voir [Agents](#agents)) |
 | `ALERTS_SENDER` | alertes désactivées | Envoyer les alertes de prix, depuis cette adresse vérifiée dans SES |
 
 Les principales variables Terraform sont :
