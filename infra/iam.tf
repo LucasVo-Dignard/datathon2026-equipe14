@@ -34,3 +34,17 @@ resource "aws_iam_instance_profile" "web" {
   name = "${local.prefix}-web"
   role = aws_iam_role.web.name
 }
+
+# The chatbot and the reports call Claude on Amazon Bedrock (../app/bot.js).
+data "aws_iam_policy_document" "web_bedrock" {
+  statement {
+    actions   = ["bedrock-mantle:CreateInference"]
+    resources = ["arn:aws:bedrock-mantle:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:project/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "web_bedrock" {
+  name   = "bedrock-agent"
+  role   = aws_iam_role.web.id
+  policy = data.aws_iam_policy_document.web_bedrock.json
+}

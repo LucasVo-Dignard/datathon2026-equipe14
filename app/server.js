@@ -8,6 +8,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { reply, report } = require('./bot');
 const reports = require('./reports');
+const { createReportStore } = require('./reports-store');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { createPortfolioStore } = require('./portfolio-store');
@@ -24,7 +25,6 @@ const MAX_TITLE_CHARS = 80;
 const DEFAULT_TITLE = 'Nouvelle conversation';
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{1,32}$/u;
 const COOKIE = 'sid';
-const MAX_REPORTS = 20; // per user, oldest dropped first
 
 // ---------------------------------------------------------------------------
 // Storage
@@ -40,7 +40,6 @@ function loadDb() {
 }
 
 const db = loadDb();
-db.reports ??= {};
 
 function saveDb() {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -55,6 +54,8 @@ const stocks = createStockLookup();
 const macro = createMacroLookup();
 const portfolioStore = createPortfolioStore({ db, saveDb });
 const portfolios = createPortfolioService({ store: portfolioStore, stocks });
+// Rapports simulés : bucket S3 si REPORTS_BUCKET est défini, sinon le fichier JSON.
+const reportStore = createReportStore({ db, saveDb });
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -228,10 +229,7 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === '/api/reports') {
-    const own = () => Object.values(db.reports)
-      .filter((r) => r.owner === user)
-      .sort((a, b) => b.createdAt - a.createdAt);
-    if (method === 'GET') return sendJson(res, 200, own());
+    if (method === 'GET') return sendJson(res, 200, await reportStore.list(user));
     // Simulated report: { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }.
     if (method === 'POST') {
       const { period } = await readJson(req);
@@ -259,19 +257,13 @@ async function handleApi(req, res, pathname) {
         createdAt: Date.now(),
         content: String(content),
       };
-      db.reports[entry.id] = entry;
-      for (const old of own().slice(MAX_REPORTS)) delete db.reports[old.id];
-      saveDb();
-      return sendJson(res, 201, entry);
+      return sendJson(res, 201, await reportStore.save(entry));
     }
   }
 
   const reportMatch = pathname.match(/^\/api\/reports\/([0-9a-f-]{36})$/);
   if (reportMatch && method === 'DELETE') {
-    const entry = Object.hasOwn(db.reports, reportMatch[1]) ? db.reports[reportMatch[1]] : null;
-    if (!entry || entry.owner !== user) throw new HttpError(404, 'Rapport introuvable');
-    delete db.reports[entry.id];
-    saveDb();
+    if (!(await reportStore.remove(user, reportMatch[1]))) throw new HttpError(404, 'Rapport introuvable');
     return sendJson(res, 200, { ok: true });
   }
 
@@ -441,7 +433,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 Promise.all([profiles.init(), portfolioStore.init()]).then(
-  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind})`)),
+  () => server.listen(PORT, () => console.log(`chatbot listening on :${PORT} (profils et portefeuilles : ${profiles.kind}, rapports : ${reportStore.kind})`)),
   (err) => {
     console.error(`Impossible d'initialiser le stockage (${profiles.kind}) :`, err.message || err.code || err);
     process.exit(1);

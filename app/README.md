@@ -32,8 +32,8 @@ npm run dev   # http://localhost:3000, loads AWS credentials from .env-aws,
 
 Deployed to the EC2 by Terraform (see `../infra/README.md`).
 
-On the EC2, the agent needs the instance role to allow
-`bedrock-mantle:CreateInference`: until then it answers with an error message.
+On the EC2, the agent uses the instance role, which allows
+`bedrock-mantle:CreateInference` (`infra/iam.tf`).
 
 ## Investor profile
 
@@ -119,5 +119,11 @@ history and news are still fictional, so the report is too.
 
 API (logged-in user): `GET /api/reports` (newest first),
 `POST /api/reports { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }` (409 until
-the user has a portfolio), `DELETE /api/reports/:id`. The last 20 reports per user
-are kept in the JSON file (`db.reports`), like conversations.
+the user has a portfolio), `DELETE /api/reports/:id`.
+
+Storage (`reports-store.js`, last 20 reports per user):
+
+- **`REPORTS_BUCKET` set** → private S3 bucket (`infra/reports.tf`), one JSON object
+  per report at `reports/<username>/<id>.json`. On the EC2, `scripts/deploy-app.sh`
+  writes `REPORTS_BUCKET` into `/etc/chatbot.env` from the Terraform output.
+- **not set** → the prototype JSON file (`db.reports`), like conversations.

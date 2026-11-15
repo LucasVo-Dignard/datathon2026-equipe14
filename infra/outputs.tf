@@ -32,3 +32,8 @@ output "ecr_repository_url" {
   description = "ECR repository of the app image (pushed by ../scripts/deploy-app.sh)."
   value       = aws_ecr_repository.app.repository_url
 }
+
+output "reports_bucket" {
+  description = "Private S3 bucket of the simulated reports (REPORTS_BUCKET for the app)."
+  value       = aws_s3_bucket.reports.bucket
+}
