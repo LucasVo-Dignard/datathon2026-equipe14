@@ -135,31 +135,13 @@ valeur garde sa source et sa date.
 La recherche web de l'agent est décrite dans [Agents](#agents).
 
 **Jobs d'ingestion.** Ils tournent sur AWS Batch (Fargate), lancés par EventBridge
-Scheduler, avec une seule image (`infra-batch/Dockerfile`). Les horaires sont à l'heure
-de Toronto et ne tournent qu'en prod : en dev, on lance les jobs à la main.
+Scheduler, avec une seule image (`infra-batch/Dockerfile`).
 
 | Job | Quand | Ce qu'il fait |
 | --- | --- | --- |
 | `src/marketdata/jobs/daily-refresh.js` | Jours de semaine, 18 h (après la clôture) | Pour chaque titre suivi (`tracked_symbols`, ≈ 1 000 en prod) : profil, indicateurs, objectif de cours, cours des 7 derniers jours, actions d'analystes et composition des FNB, depuis Yahoo (60 appels/min, environ 2 h 15). Les titres détenus par les abonnés aux alertes passent en premier, puis les alertes de prix partent (`price-alerts.js`) |
 | `src/marketdata/jobs/news-refresh.js` | Toutes les 2 h, de 7 h à 23 h | Flux RSS des médias, et news Yahoo de 80 titres détenus au plus. Chaque nouvel article passe par Comprehend (ton, sociétés nommées). Les articles de plus de 30 jours sont supprimés |
 | `src/marketdata/jobs/populate-top-companies.js` | À la main, une fois | Prend les N plus grosses capitalisations de companiesmarketcap.com, enregistre leur profil Yahoo et les ajoute à `tracked_symbols` (1 000 sociétés : environ 17 min) |
-
-Chaque titre, étape ou article échoue seul, sans arrêter le reste : l'erreur est
-journalisée (et notée dans `tracked_symbols.last_error`), puis retentée au passage
-suivant. Un job ne sort en erreur, et n'est relancé par Batch, que si rien n'a marché
-(base ou réseau en panne). Les journaux sont dans CloudWatch
-(`/aws/batch/<préfixe>-daily-refresh`).
-
-Lancer un job à la main sur AWS (même définition de job, script choisi par `command`) :
-
-```bash
-aws batch submit-job --job-name news-manual --job-queue <préfixe>-jobs \
-  --job-definition <préfixe>-daily-refresh \
-  --container-overrides '{"command":["src/marketdata/jobs/news-refresh.js"]}'
-```
-
-Sans `--container-overrides`, c'est la mise à jour quotidienne qui tourne. En dev, elle
-ne fait rien tant qu'`infra-batch` n'est pas appliqué avec `-var refresh_enabled=true`.
 
 **Conditions des flux RSS.** Ils sont offerts pour l'usage personnel et pour les
 agrégateurs qui affichent le titre et un court extrait, avec un lien vers l'article
