@@ -3,6 +3,7 @@
     python db/migrate.py            # apply pending migrations
     python db/migrate.py info       # show applied / pending, change nothing
     python db/migrate.py validate   # check applied files were not edited
+    python db/migrate.py repair     # accept the checksum of an applied file that was edited
     python db/migrate.py --env prod info
 
 The environment (lucas, andre, youcef or prod) comes from --env, or from
@@ -42,7 +43,7 @@ REGION = "us-east-1"
 # Keep in sync with dev_environments in infra*/env.tf. prod = default workspace.
 ENVIRONMENTS = ("prod", "lucas", "andre", "youcef")
 FLYWAY_IMAGE = "flyway/flyway:13"  # keep in sync with db/docker-compose.yml
-COMMANDS = ("migrate", "info", "validate")
+COMMANDS = ("migrate", "info", "validate", "repair")
 TIMEOUT_SECONDS = 600
 
 DB_DIR = Path(__file__).resolve().parent
