@@ -134,6 +134,33 @@ valeur garde sa source et sa date.
 
 La recherche web de l'agent est décrite dans [Agents](#agents).
 
+**Jobs d'ingestion.** Ils tournent sur AWS Batch (Fargate), lancés par EventBridge
+Scheduler, avec une seule image (`infra-batch/Dockerfile`). Les horaires sont à l'heure
+de Toronto et ne tournent qu'en prod : en dev, on lance les jobs à la main.
+
+| Job | Quand | Ce qu'il fait |
+| --- | --- | --- |
+| `src/marketdata/jobs/daily-refresh.js` | Jours de semaine, 18 h (après la clôture) | Pour chaque titre suivi (`tracked_symbols`, ≈ 1 000 en prod) : profil, indicateurs, objectif de cours, cours des 7 derniers jours, actions d'analystes et composition des FNB, depuis Yahoo (60 appels/min, environ 2 h 15). Les titres détenus par les abonnés aux alertes passent en premier, puis les alertes de prix partent (`price-alerts.js`) |
+| `src/marketdata/jobs/news-refresh.js` | Toutes les 2 h, de 7 h à 23 h | Flux RSS des médias, et news Yahoo de 80 titres détenus au plus. Chaque nouvel article passe par Comprehend (ton, sociétés nommées). Les articles de plus de 30 jours sont supprimés |
+| `src/marketdata/jobs/populate-top-companies.js` | À la main, une fois | Prend les N plus grosses capitalisations de companiesmarketcap.com, enregistre leur profil Yahoo et les ajoute à `tracked_symbols` (1 000 sociétés : environ 17 min) |
+
+Chaque titre, étape ou article échoue seul, sans arrêter le reste : l'erreur est
+journalisée (et notée dans `tracked_symbols.last_error`), puis retentée au passage
+suivant. Un job ne sort en erreur, et n'est relancé par Batch, que si rien n'a marché
+(base ou réseau en panne). Les journaux sont dans CloudWatch
+(`/aws/batch/<préfixe>-daily-refresh`).
+
+Lancer un job à la main sur AWS (même définition de job, script choisi par `command`) :
+
+```bash
+aws batch submit-job --job-name news-manual --job-queue <préfixe>-jobs \
+  --job-definition <préfixe>-daily-refresh \
+  --container-overrides '{"command":["src/marketdata/jobs/news-refresh.js"]}'
+```
+
+Sans `--container-overrides`, c'est la mise à jour quotidienne qui tourne. En dev, elle
+ne fait rien tant qu'`infra-batch` n'est pas appliqué avec `-var refresh_enabled=true`.
+
 **Conditions des flux RSS.** Ils sont offerts pour l'usage personnel et pour les
 agrégateurs qui affichent le titre et un court extrait, avec un lien vers l'article
 et le nom de la source. C'est tout ce que l'outil garde et affiche, sans texte
@@ -189,26 +216,20 @@ nouveau terminal, et après avoir renouvelé `.env-aws`.
 | | le script `chatbot-db-env`, à chaque démarrage de l'app | `DATABASE_URL`, construite depuis RDS et Secrets Manager |
 | Jobs Batch | Terraform (`infra-batch/batch.tf`) | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SECRET_ARN`, `AWS_DEFAULT_REGION`, `REFRESH_ENABLED`, `ALERTS_SENDER`, `SES_CONFIGURATION_SET`, `APP_URL`, `REPORTS_BUCKET` |
 
-Les autres (`PORT`, `DATA_FILE`, `AGENT_MODEL`, `AGENT_EFFORT`, `NEWS_ENABLED`) ne sont
-posées nulle part et gardent leur valeur par défaut. En local, elles sont toutes
-optionnelles : décommente celles qu'il te faut dans `.env-dev`.
+Toutes les autres gardent leur valeur par défaut. En local, rien n'est obligatoire : mets
+dans `.env-dev` seulement celles des fonctions que tu veux utiliser.
 
-| Variable | Défaut | Effet |
+| Variable | Sans elle | Pour |
 | --- | --- | --- |
-| `PORT` | `3000` | Port HTTP de l'app |
-| `DATABASE_URL` | non défini → fichier JSON | PostgreSQL. Sans elle, tout est stocké dans `app/data/db.json` |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SECRET_ARN` | non définis | Jobs seulement, à la place de `DATABASE_URL` : le mot de passe est lu dans Secrets Manager (`src/marketdata/db/connection.js`) |
-| `DATA_FILE` | `app/data/db.json` | Fichier JSON du mode sans base |
-| `AWS_REGION` | `AWS_DEFAULT_REGION`, sinon `us-east-1` | Région de Bedrock, d'AgentCore et du stockage S3 des rapports |
-| `AGENT_MODEL`, `AGENT_EFFORT` | `anthropic.claude-opus-5-5`, `low` | Modèle et effort de l'agent conversationnel et de la rédaction des rapports |
-| `RESEARCH_HARNESS_ARN` | non défini → recherche désactivée | Agent de recherche AgentCore (voir [Agents](#agents)) |
-| `RESEARCH_REVIEWER_ARN` | non défini → pas de relecture | Agent relecteur |
-| `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` | non définis → rapports non versés | Où verser les rapports de recherche dans la base de connaissances |
-| `RESEARCH_GATEWAY_URL` | non défini → pas de vue de marché partagée | Gateway de l'agent, pour récupérer la vue de marché une fois par jour |
-| `REPORTS_BUCKET` | non défini → fichier JSON | Stockage des rapports sur S3 |
-| `ALERTS_SENDER`, `SES_CONFIGURATION_SET` | non définis → alertes désactivées | Expéditeur SES vérifié. Seul `ALERTS_SENDER` active les alertes |
-| `APP_URL` | non défini → liens relatifs | Adresse de l'app dans les courriels (sans elle, les liens ne marchent pas) |
-| `REFRESH_ENABLED`, `NEWS_ENABLED` | activés (Terraform ne pose que `REFRESH_ENABLED`, désactivé en dev) | Désactive le job de mise à jour ou celui des news |
+| `DATABASE_URL` | tout est stocké dans `app/data/db.json` | Utiliser PostgreSQL (par exemple celui de Docker, voir plus bas) |
+| `RESEARCH_HARNESS_ARN` | pas de recherche | L'agent de recherche AgentCore (voir [Agents](#agents)) |
+| `RESEARCH_REVIEWER_ARN` | pas de relecture | L'agent relecteur |
+| `RESEARCH_KB_BUCKET`, `RESEARCH_KB_ID`, `RESEARCH_KB_DATA_SOURCE_ID` | rapports de recherche non versés | Verser les rapports de recherche dans la base de connaissances |
+| `RESEARCH_GATEWAY_URL` | pas de vue de marché partagée | Récupérer la vue de marché Bigdata.com une fois par jour |
+| `ALERTS_SENDER` | alertes désactivées | Envoyer les alertes de prix, depuis cette adresse vérifiée dans SES |
+
+Les valeurs `RESEARCH_*` de la prod sont dans les sorties de
+`terraform -chdir=infra-agents output`.
 
 Les principales variables Terraform (par environnement, sinon des valeurs par défaut
 adaptées à la prod ou au dev) sont :
