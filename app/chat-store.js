@@ -3,7 +3,7 @@
 // Stockage des conversations du chat (historique des messages).
 //
 //   - DATABASE_URL défini -> Postgres (tables chats et chat_messages, créées par
-//                            la migration Flyway db/migrations/V5__create_chats.sql)
+//                            la migration Flyway db/migrations/V9__create_chats.sql)
 //   - sinon               -> fichier JSON du prototype (db.chats), pour que l'app
 //                            tourne en local sans base
 //

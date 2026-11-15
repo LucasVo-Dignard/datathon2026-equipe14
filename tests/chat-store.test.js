@@ -2,7 +2,7 @@
 // JSON backend always runs. Postgres backend runs only if TEST_DATABASE_URL is set,
 // e.g. TEST_DATABASE_URL=postgres://localhost:5433/test npm test
 // WARNING: it drops and recreates the chats and chat_messages tables in that
-// database, applying db/migrations/V5__create_chats.sql (what Flyway runs).
+// database, applying db/migrations/V9__create_chats.sql (what Flyway runs).
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -73,7 +73,7 @@ test('Postgres store', { skip: !process.env.TEST_DATABASE_URL && 'TEST_DATABASE_
   try {
     await assert.rejects(store.init(), /migrations Flyway/, 'init() reports a missing migration');
     await admin.query(fs.readFileSync(
-      path.join(__dirname, '..', 'db', 'migrations', 'V5__create_chats.sql'), 'utf8'));
+      path.join(__dirname, '..', 'db', 'migrations', 'V9__create_chats.sql'), 'utf8'));
     await exerciseStore(store);
     // Deleting a chat deleted its messages too (ON DELETE CASCADE): only the other chat's remain.
     const { rows } = await admin.query('SELECT content FROM chat_messages');

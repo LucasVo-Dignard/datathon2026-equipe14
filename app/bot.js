@@ -17,7 +17,8 @@
 //                ou null si l'utilisateur n'a pas rempli le questionnaire.
 //                Son résumé (profileSummary) est ajouté au prompt système ;
 //                profile.guardrails et profile.tensions servent aux contrôles.
-//   - portfolio: le portefeuille du client (voir portfolio.js), pas encore utilisé
+//   - portfolio: le portefeuille du client (voir portfolio.js : summary, holdings, history),
+//                ou null s'il n'a pas encore choisi comment le créer ; pas encore utilisé
 // et retourne le texte de la réponse, en Markdown.
 //
 // Identifiants AWS : en local, ceux de .env-aws (chargés par `npm run dev`) ;

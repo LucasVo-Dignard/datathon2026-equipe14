@@ -198,6 +198,7 @@
       h('h2', {}, 'Vos préférences'),
       h('dl', { class: 'prefs' },
         h('dt', {}, 'Secteurs'), h('dd', {}, chips(p.sectors)),
+        h('dt', {}, 'Régions'), h('dd', {}, chips(p.regions || [])),
         h('dt', {}, 'Entreprises'), h('dd', {}, p.style),
         h('dt', {}, 'Diversification'), h('dd', {}, p.diversification),
         h('dt', {}, 'Cryptoactifs'), h('dd', {}, p.crypto),
@@ -210,6 +211,9 @@
         h('li', {}, `Cryptoactifs : au plus ${g.maxCryptoShare} % du portefeuille simulé`),
         h('li', {}, `Un même secteur : au plus ${g.maxSingleSectorShare} %`),
         h('li', {}, `Au moins ${g.minDiversifiedAssets} actifs différents`)),
+
+      h('h2', {}, 'Alertes de prix par courriel'),
+      window.Notifications ? window.Notifications.card() : null,
 
       h('h2', {}, 'Persona le plus proche'),
       h('div', { class: 'p-card' },

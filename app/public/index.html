@@ -33,6 +33,7 @@
       <nav class="top-tabs" aria-label="Sections">
         <button data-tab="portfolio" aria-pressed="true">Portefeuille</button>
         <button data-tab="profile" aria-pressed="false">Mon profil <span class="badge todo" data-profile-badge>À compléter</span></button>
+        <button data-tab="macro" aria-pressed="false">Macro</button>
       </nav>
       <form id="stock-search" class="stock-search" role="search">
         <input id="stock-query" type="search" placeholder="Rechercher un symbole (ex. RY)" aria-label="Symbole boursier"
@@ -49,7 +50,25 @@
       <main id="dashboard" class="dashboard" aria-label="Portefeuille">
         <p id="dash-error" class="error" role="alert"></p>
 
-        <section class="overview card">
+        <!-- First visit: how to start the portfolio -->
+        <section id="portfolio-setup" class="card setup" hidden>
+          <h2>Créez votre portefeuille</h2>
+          <p class="muted">Ce portefeuille est simulé : aucune transaction réelle n’est effectuée. Comment voulez-vous commencer ?</p>
+          <div class="setup-options">
+            <button type="button" class="setup-option" data-mode="random">
+              <strong>Générer un portefeuille aléatoire</strong>
+              <span class="muted small">Quelques titres tirés au hasard parmi ceux suivis dans notre base, avec des quantités et des coûts d’achat fictifs.</span>
+            </button>
+            <button type="button" class="setup-option" data-mode="custom">
+              <strong>Composer mon propre portefeuille</strong>
+              <span class="muted small">Partez d’un portefeuille vide et ajoutez vos titres un à un, avec la quantité de votre choix.</span>
+            </button>
+          </div>
+          <p id="setup-status" class="muted small" role="status"></p>
+          <p id="setup-error" class="error" role="alert"></p>
+        </section>
+
+        <section class="overview card dash-section">
           <div class="hero">
             <span class="label">Valeur totale</span>
             <span id="total-value" class="hero-value">—</span>
@@ -74,7 +93,7 @@
           </div>
         </section>
 
-        <section class="card">
+        <section class="card dash-section">
           <div class="card-head">
             <div>
               <h2>Performance</h2>
@@ -99,7 +118,7 @@
           </details>
         </section>
 
-        <section class="card">
+        <section class="card dash-section">
           <div class="card-head">
             <div>
               <h2>Actualités</h2>
@@ -111,7 +130,7 @@
           <p class="muted small">Actualités fictives (prototype).</p>
         </section>
 
-        <section class="card">
+        <section class="card dash-section">
           <div class="card-head"><h2>Mes actions</h2></div>
           <div class="table-wrap">
             <table id="holdings" class="table">
@@ -124,18 +143,39 @@
                   <th class="num">Valeur</th>
                   <th class="num">Gain/perte</th>
                   <th class="num opt">Poids</th>
+                  <th class="row-actions"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
-          <p class="muted small">Données fictives (prototype), en dollars canadiens.</p>
+          <form id="add-holding" class="holding-form">
+            <input id="add-symbol" placeholder="Symbole (ex. RY.TO)" aria-label="Symbole à ajouter" maxlength="15"
+                   autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+            <input id="add-quantity" type="number" min="0.0001" step="any" inputmode="decimal" placeholder="Quantité"
+                   aria-label="Quantité" required>
+            <button type="submit" class="primary">Ajouter</button>
+          </form>
+          <p id="holdings-error" class="error" role="alert"></p>
+          <p class="muted small">Derniers cours connus, convertis en dollars canadiens. Coûts d’achat simulés (prototype).</p>
         </section>
       </main>
 
       <!-- Investor profile (replaces the dashboard pane) -->
       <main id="profile-view" class="profile" aria-label="Profil investisseur">
         <div id="profile-body" class="profile-body"></div>
+      </main>
+
+      <!-- Macro data (replaces the dashboard pane) -->
+      <main id="macro-view" class="macro" aria-label="Données macroéconomiques">
+        <div class="macro-body">
+          <h1>Données macroéconomiques</h1>
+          <p class="muted small">Indicateurs annuels de la Banque mondiale, tels que publiés. Les dernières années
+            ne sont pas toujours disponibles.</p>
+          <p id="macro-status" class="muted small" role="status"></p>
+          <p id="macro-error" class="error" role="alert"></p>
+          <div id="macro-list" class="macro-list"></div>
+        </div>
       </main>
 
       <!-- Assistant -->
@@ -174,6 +214,7 @@
     <nav class="tabbar" aria-label="Sections">
       <button data-tab="portfolio" aria-pressed="true">Portefeuille</button>
       <button data-tab="profile" aria-pressed="false">Profil</button>
+      <button data-tab="macro" aria-pressed="false">Macro</button>
       <button data-tab="assistant" aria-pressed="false">Assistant</button>
     </nav>
   </div>
@@ -196,8 +237,10 @@
   </dialog>
 
   <script src="/dashboard.js"></script>
+  <script src="/notifications-ui.js"></script>
   <script src="/profile-ui.js"></script>
   <script src="/stock-search.js"></script>
+  <script src="/macro.js"></script>
   <script src="/markdown.js"></script>
   <script src="/app.js"></script>
 </body>

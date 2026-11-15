@@ -54,36 +54,111 @@
     $('gain-value').textContent = signedMoney(s.gain);
     setDelta($('gain-delta'), s.gain, s.gainPct, ' depuis l’achat');
     $('cash-value').textContent = money.format(s.cash);
-    $('cash-share').textContent = `${pctShort.format(s.cash / s.totalValue)} du portefeuille`;
+    $('cash-share').textContent = s.totalValue ? `${pctShort.format(s.cash / s.totalValue)} du portefeuille` : '';
   }
 
-  function renderHoldings({ holdings }) {
-    const rows = holdings.map((h) => {
-      const tr = el('tr');
-      const name = el('td');
-      const symbol = el('button', { type: 'button', class: 'symbol', title: `Voir ${h.symbol}` }, h.symbol);
-      symbol.addEventListener('click', () => window.StockModal.open(h.symbol));
-      name.append(symbol, el('span', { class: 'name', title: h.name }, h.name));
-      const day = el('td', { class: 'num opt-sm' });
-      const dayDelta = el('span');
-      setDelta(dayDelta, h.dayChange, h.dayChangePct);
-      day.append(dayDelta);
-      const gain = el('td', { class: 'num' });
-      const gainPct = el('span');
-      setDelta(gainPct, h.gain, h.gainPct);
-      gain.append(el('span', { class: 'block' }, signedMoney(h.gain)), gainPct);
-      tr.append(
-        name,
-        el('td', { class: 'num opt' }, num.format(h.quantity)),
-        el('td', { class: 'num opt' }, money.format(h.price)),
-        day,
-        el('td', { class: 'num' }, money.format(h.marketValue)),
-        gain,
-        el('td', { class: 'num opt' }, pctShort.format(h.weight)),
-      );
+  function holdingRow(h) {
+    const tr = el('tr');
+    const name = el('td');
+    const symbol = el('button', { type: 'button', class: 'symbol', title: `Voir ${h.symbol}` }, h.symbol);
+    symbol.addEventListener('click', () => window.StockModal.open(h.symbol));
+    name.append(symbol, el('span', { class: 'name', title: h.name }, h.available ? h.name : 'Cours indisponible'));
+    const edit = el('button', { type: 'button', class: 'icon-btn row-edit', title: 'Modifier la quantité',
+      'aria-label': `Modifier la quantité de ${h.symbol}` }, '✎');
+    edit.addEventListener('click', () => { holdings.editing = h.symbol; renderHoldings(); });
+    const actions = el('td', { class: 'row-actions' });
+    actions.append(edit);
+
+    if (!h.available) {
+      tr.append(name, el('td', { class: 'num opt' }, num.format(h.quantity)),
+        el('td', { class: 'num opt' }, '—'), el('td', { class: 'num opt-sm' }, '—'), el('td', { class: 'num' }, '—'),
+        el('td', { class: 'num' }, '—'), el('td', { class: 'num opt' }, '—'), actions);
       return tr;
+    }
+    const day = el('td', { class: 'num opt-sm' });
+    const dayDelta = el('span');
+    setDelta(dayDelta, h.dayChange, h.dayChangePct);
+    day.append(dayDelta);
+    const gain = el('td', { class: 'num' });
+    const gainPct = el('span');
+    setDelta(gainPct, h.gain, h.gainPct);
+    gain.append(el('span', { class: 'block' }, signedMoney(h.gain)), gainPct);
+    tr.append(
+      name,
+      el('td', { class: 'num opt' }, num.format(h.quantity)),
+      el('td', { class: 'num opt' }, money.format(h.price)),
+      day,
+      el('td', { class: 'num' }, money.format(h.marketValue)),
+      gain,
+      el('td', { class: 'num opt' }, pctShort.format(h.weight)),
+      actions,
+    );
+    return tr;
+  }
+
+  // Edit mode spans the whole row, so it also works on phones where the quantity column is hidden.
+  function editRow(h) {
+    const tr = el('tr', { class: 'editing' });
+    const td = el('td', { colspan: '8' });
+    const form = el('form', { class: 'holding-form' });
+    const id = `qty-${h.symbol.replace(/[^A-Za-z0-9]/g, '_')}`;
+    const label = el('label', { for: id }, `Quantité de ${h.symbol}`);
+    const input = el('input', { id, type: 'number', min: '0.0001', step: 'any', inputmode: 'decimal', required: '' });
+    input.value = String(h.quantity);
+    const save = el('button', { type: 'submit', class: 'primary' }, 'Enregistrer');
+    const cancel = el('button', { type: 'button', class: 'secondary' }, 'Annuler');
+    const remove = el('button', { type: 'button', class: 'secondary danger' }, 'Retirer');
+    const stop = () => { holdings.editing = null; renderHoldings(); };
+    cancel.addEventListener('click', stop);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') stop(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      mutate('PUT', h.symbol, { quantity: Number(input.value) });
     });
+    remove.addEventListener('click', () => {
+      if (confirm(`Retirer ${h.symbol} du portefeuille ?`)) mutate('DELETE', h.symbol);
+    });
+    form.append(label, input, save, cancel, remove);
+    td.append(form);
+    tr.append(td);
+    queueMicrotask(() => { input.focus(); input.select(); });
+    return tr;
+  }
+
+  const holdings = { items: [], editing: null };
+
+  function renderHoldings() {
+    const rows = holdings.items.map((h) => (h.symbol === holdings.editing ? editRow(h) : holdingRow(h)));
+    if (!rows.length) {
+      const tr = el('tr');
+      tr.append(el('td', { colspan: '8', class: 'muted' }, 'Aucune action pour l’instant. Ajoutez un titre ci-dessous.'));
+      rows.push(tr);
+    }
     $('holdings').tBodies[0].replaceChildren(...rows);
+  }
+
+  async function api(method, url, body) {
+    const res = await fetch(url, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Erreur ${res.status}`);
+    return data;
+  }
+
+  async function mutate(method, symbol, body) {
+    $('holdings-error').textContent = '';
+    try {
+      const data = await api(method, `/api/portfolio/holdings/${encodeURIComponent(symbol)}`, body);
+      holdings.editing = null;
+      render(data);
+      return true;
+    } catch (err) {
+      $('holdings-error').textContent = err.message;
+      return false;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -144,6 +219,15 @@
 
   function renderChart() {
     const box = $('chart');
+    if (chart.history.length < 2) {
+      chart.points = [];
+      chart.layout = null;
+      $('perf-summary').replaceChildren();
+      box.setAttribute('aria-label', 'Aucune donnée de performance');
+      box.replaceChildren(el('p', { class: 'muted small' }, 'Ajoutez des titres pour voir la performance du portefeuille.'));
+      $('history-table').tBodies[0].replaceChildren();
+      return;
+    }
     const pts = (chart.points = periodPoints());
     if (pts.length < 2) return;
 
@@ -324,25 +408,80 @@
   }
 
   // -------------------------------------------------------------------------
+  // First visit: random portfolio or build your own
+  // -------------------------------------------------------------------------
 
+  function showSetup(show) {
+    $('portfolio-setup').hidden = !show;
+    for (const section of document.querySelectorAll('#dashboard .dash-section')) section.hidden = show;
+  }
+
+  function setupPortfolio() {
+    const buttons = $('portfolio-setup').querySelectorAll('button[data-mode]');
+    for (const btn of buttons) {
+      btn.addEventListener('click', async () => {
+        $('setup-error').textContent = '';
+        $('setup-status').textContent = btn.dataset.mode === 'random' ? 'Sélection des titres…' : '';
+        for (const b of buttons) b.disabled = true;
+        try {
+          render(await api('POST', '/api/portfolio', { mode: btn.dataset.mode }));
+          if (btn.dataset.mode === 'custom') $('add-symbol').focus();
+        } catch (err) {
+          $('setup-error').textContent = err.message;
+        } finally {
+          $('setup-status').textContent = '';
+          for (const b of buttons) b.disabled = false;
+        }
+      });
+    }
+
+    $('add-holding').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const symbol = $('add-symbol').value.trim().toUpperCase();
+      const quantity = Number($('add-quantity').value);
+      if (!symbol) return;
+      const submit = e.target.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      if (await mutate('PUT', symbol, { quantity })) {
+        $('add-symbol').value = '';
+        $('add-quantity').value = '';
+      }
+      submit.disabled = false;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+
+  function render(data) {
+    showSetup(false);
+    renderSummary(data);
+    holdings.items = data.holdings;
+    renderHoldings();
+    news.items = data.news || [];
+    news.names = Object.fromEntries(data.holdings.map((h) => [h.symbol, h.name]));
+    renderNews();
+    chart.history = data.history;
+    hideHover();
+    renderChart();
+  }
+
+  // Resolves to true if the user already has a portfolio, false if they still have to choose.
   async function load() {
     $('dash-error').textContent = '';
     try {
-      const res = await fetch('/api/portfolio');
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-      const data = await res.json();
-      renderSummary(data);
-      renderHoldings(data);
-      news.items = data.news || [];
-      news.names = Object.fromEntries(data.holdings.map((h) => [h.symbol, h.name]));
-      renderNews();
-      chart.history = data.history;
-      renderChart();
+      const data = await api('GET', '/api/portfolio');
+      if (!data) {
+        showSetup(true);
+        return false;
+      }
+      render(data);
     } catch (err) {
       $('dash-error').textContent = `Impossible de charger le portefeuille : ${err.message}`;
     }
+    return true;
   }
 
   setupChart();
+  setupPortfolio();
   window.Dashboard = { load, redraw: () => chart.history.length && renderChart() };
 })();

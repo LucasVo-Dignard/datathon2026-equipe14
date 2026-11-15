@@ -4,8 +4,11 @@
 -- Users and sessions are still in the app's JSON file (prototype login), so
 -- owner is a plain username. When a users table exists, add a foreign key on
 -- owner in a new migration.
+--
+-- Idempotent (IF NOT EXISTS): this migration was first numbered V5, and the
+-- andre environment already has these tables from it.
 
-CREATE TABLE chats (
+CREATE TABLE IF NOT EXISTS chats (
     id          uuid        PRIMARY KEY,
     owner       text        NOT NULL,
     title       text        NOT NULL,
@@ -14,9 +17,9 @@ CREATE TABLE chats (
 );
 
 -- Sidebar listing: a user's chats, most recent first.
-CREATE INDEX chats_owner_updated_at_idx ON chats (owner, updated_at DESC);
+CREATE INDEX IF NOT EXISTS chats_owner_updated_at_idx ON chats (owner, updated_at DESC);
 
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
     id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     chat_id     uuid        NOT NULL REFERENCES chats (id) ON DELETE CASCADE,
     role        text        NOT NULL CHECK (role IN ('user', 'assistant')),
@@ -25,4 +28,4 @@ CREATE TABLE chat_messages (
 );
 
 -- Loading a conversation in order.
-CREATE INDEX chat_messages_chat_id_idx ON chat_messages (chat_id, id);
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id, id);

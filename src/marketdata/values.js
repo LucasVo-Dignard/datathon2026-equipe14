@@ -13,6 +13,15 @@ function normalizeSymbol(symbol) {
   return cleaned;
 }
 
+// Canonical form of a country or indicator code (" can " -> "CAN",
+// "ny.gdp.mktp.kd.zg" -> "NY.GDP.MKTP.KD.ZG"). Codes go into URL paths, so
+// only letters, digits, dots and underscores are accepted.
+function normalizeCode(code) {
+  const cleaned = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if (!/^[A-Z0-9._]+$/.test(cleaned)) throw new RangeError(`invalid code: ${code}`);
+  return cleaned;
+}
+
 // Today's date in the local time zone, like Python's date.today().
 function today() {
   const d = new Date();
@@ -50,4 +59,27 @@ class DateRange {
   }
 }
 
-module.exports = { normalizeSymbol, DateRange, today, isoDate, addDays };
+// Inclusive range of calendar years, for yearly series such as macro data.
+class YearRange {
+  constructor(start, end) {
+    for (const year of [start, end]) {
+      if (!Number.isInteger(year)) throw new RangeError(`not a year: ${year}`);
+    }
+    if (start > end) throw new RangeError(`start ${start} is after end ${end}`);
+    this.start = start;
+    this.end = end;
+    Object.freeze(this);
+  }
+
+  // Range covering the `years` years that end on `end` (inclusive).
+  static lastYears(years, end = Number(today().slice(0, 4))) {
+    if (!(years >= 1)) throw new RangeError('years must be at least 1');
+    return new YearRange(end - years + 1, end);
+  }
+
+  includes(year) {
+    return this.start <= year && year <= this.end;
+  }
+}
+
+module.exports = { normalizeSymbol, normalizeCode, DateRange, YearRange, today, isoDate, addDays };

@@ -31,6 +31,18 @@ async function activeSymbols(db) {
   return rows.map((r) => r.symbol);
 }
 
+// Follow symbols (or follow them again if they were deactivated).
+async function trackSymbols(db, symbols) {
+  await insertMany(db, 'tracked_symbols', ['symbol'], [...new Set(symbols)].map((s) => [s]),
+    'ON CONFLICT (symbol) DO UPDATE SET active = true');
+}
+
+// Symbols that already have a profile from `provider`.
+async function profiledSymbols(db, provider) {
+  const { rows } = await db.query('SELECT symbol FROM company_profiles WHERE provider = $1', [provider]);
+  return new Set(rows.map((r) => r.symbol));
+}
+
 // Record the outcome of a refresh. last_refreshed_at moves only on success,
 // so it always says how fresh the data really is.
 async function markRefreshed(db, symbol, error = null) {
@@ -126,6 +138,20 @@ async function saveRecommendations(db, trends) {
     `ON CONFLICT (symbol, provider, period) DO UPDATE SET ${updateAll(TREND_COLUMNS)}`);
 }
 
+// --- Macro data --------------------------------------------------------------
+
+const MACRO_COLUMNS = ['value', 'country_name', 'indicator_name', 'dataset', 'source_organization',
+  'source_updated_on', 'source_url', 'fetched_at'];
+
+async function saveMacroObservations(db, observations) {
+  const key = (o) => `${o.country}|${o.indicator}|${o.provider}|${o.year}`;
+  const unique = [...new Map(observations.map((o) => [key(o), o])).values()];
+  await insertMany(db, 'macro_observations', ['country', 'indicator', 'provider', 'year', ...MACRO_COLUMNS],
+    unique.map((o) => [o.country, o.indicator, o.provider, o.year, o.value, o.countryName, o.indicatorName,
+      o.dataset, o.sourceOrganization, o.sourceUpdatedOn, o.sourceUrl, o.fetchedAt]),
+    `ON CONFLICT (country, indicator, provider, year) DO UPDATE SET ${updateAll(MACRO_COLUMNS)}`);
+}
+
 // --- Reads -------------------------------------------------------------------
 
 // Latest profile and the last two daily closes of a symbol, from any
@@ -133,7 +159,7 @@ async function saveRecommendations(db, trends) {
 // was fetched, to decide whether the data is stale.
 async function latestQuote(db, symbol) {
   const { rows: [profile] } = await db.query(
-    `SELECT name, exchange, currency FROM company_profiles
+    `SELECT name, exchange, currency, sector FROM company_profiles
       WHERE symbol = $1 ORDER BY fetched_at DESC LIMIT 1`, [symbol]);
   const { rows: bars } = await db.query(
     `SELECT to_char(date, 'YYYY-MM-DD') AS date, close::float8 AS close, currency, provider, fetched_at
@@ -144,6 +170,7 @@ async function latestQuote(db, symbol) {
     name: profile?.name || symbol,
     exchange: profile?.exchange || null,
     currency: bars[0].currency || profile?.currency || null,
+    sector: profile?.sector || null,
     price: bars[0].close,
     prevClose: bars[1]?.close ?? null,
     asOf: bars[0].date,
@@ -152,8 +179,34 @@ async function latestQuote(db, symbol) {
   };
 }
 
+// Every macro observation, for the macro page. The table stays small (a few
+// indicators x countries x years).
+async function macroObservations(db) {
+  const { rows } = await db.query(
+    `SELECT country, indicator, provider, year, value, country_name, indicator_name, dataset,
+            source_organization, to_char(source_updated_on, 'YYYY-MM-DD') AS source_updated_on, source_url,
+            fetched_at
+       FROM macro_observations ORDER BY indicator, country, year`);
+  return rows.map((r) => ({
+    country: r.country,
+    indicator: r.indicator,
+    provider: r.provider,
+    year: r.year,
+    value: r.value,
+    countryName: r.country_name,
+    indicatorName: r.indicator_name,
+    dataset: r.dataset,
+    sourceOrganization: r.source_organization,
+    sourceUpdatedOn: r.source_updated_on,
+    sourceUrl: r.source_url,
+    fetchedAt: r.fetched_at,
+  }));
+}
+
 module.exports = {
   activeSymbols,
+  trackSymbols,
+  profiledSymbols,
   markRefreshed,
   saveProfile,
   savePriceBars,
@@ -163,5 +216,7 @@ module.exports = {
   saveNews,
   saveEarnings,
   saveRecommendations,
+  saveMacroObservations,
+  macroObservations,
   latestQuote,
 };

@@ -25,6 +25,7 @@ without a database) are in a JSON file.
   price target, rating actions, and a year of daily prices on the first load
   (the last week afterwards). Without a database, it asks Yahoo and saves nothing.
 - `public/`: interface (HTML/CSS/JS). `profile-ui.js` is the questionnaire and result page.
+- `portfolio.js` / `portfolio-store.js`: the user's simulated portfolio (see below).
 
 Run locally:
 
@@ -88,7 +89,7 @@ rule as profiles:
 
 - **`DATABASE_URL` set** → Postgres: `chats` (id, owner, title, dates) and
   `chat_messages` (one row per message, deleted with their chat). Created by
-  `db/migrations/V5__create_chats.sql`; the server refuses to start if they are missing.
+  `db/migrations/V9__create_chats.sql`; the server refuses to start if they are missing.
   The question and the agent's answer are saved together, once the answer is known.
 - **not set** → the prototype JSON file (`db.chats`).
 
@@ -100,3 +101,38 @@ database (the test drops the table): `TEST_DATABASE_URL=postgres://... npm test`
 On the EC2, the Docker image installs the SDK (`npm ci`), but the instance role
 still needs `bedrock-mantle:CreateInference` (see `infra/iam.tf`): until then
 the agent answers with an error message.
+
+## Portfolio
+
+The first time the user opens the Portefeuille tab, they choose how to start:
+
+- **Random**: 8 symbols picked at random from `tracked_symbols` (those that already
+  have prices in `price_bars` first, CAD/USD preferred), each worth about
+  1 500–8 000 $, with a simulated purchase cost (25 % below to 20 % above the
+  current price) and some cash. Without a database, it picks from the V3 starter list.
+- **Custom**: an empty portfolio. The user adds symbols with a quantity below the
+  "Mes actions" table; the purchase cost is the current price.
+
+The ✎ button on each row of "Mes actions" changes the quantity (or removes the stock).
+Positions are valued with the latest known price (`stocks.js`), converted to CAD with
+Yahoo exchange rates (`USDCAD=X`, ...). Performance history and news are still fictional.
+
+API (logged-in user): `GET /api/portfolio` (`null` until the user has chosen),
+`POST /api/portfolio { mode: 'random' | 'custom' }`,
+`PUT /api/portfolio/holdings/:symbol { quantity }` (add or edit),
+`DELETE /api/portfolio/holdings/:symbol`.
+
+Storage works like profiles: with `DATABASE_URL`, tables `portfolios` and
+`portfolio_holdings` (migration `V7__create_portfolios.sql`, the server refuses to
+start without it). Otherwise `db.users[username].portfolio` in the JSON file.
+
+## Price alerts by email
+
+`notifications.js` (API `/api/notifications`, card on the profile page) and the
+daily job `src/marketdata/jobs/price-alerts.js` (run after `daily-refresh.js`)
+email users when a stock **in their portfolio** moves by their threshold or more
+in one trading day. The threshold follows the risk level (2 % Faible … 7 % Élevé,
+4 % without a profile). Thresholds and the email format are shared in
+`src/marketdata/alerts.js`. Sent with Amazon SES (see `infra/README.md`); tables
+`notification_subscriptions` and `price_alerts_sent` (migration V8). Needs
+Postgres and `ALERTS_SENDER`, otherwise the card says alerts are unavailable.

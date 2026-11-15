@@ -64,10 +64,20 @@ test('validation rejects missing, unknown and out-of-range answers', () => {
   assert.throws(() => validate(null), ProfileError);
 });
 
+test('investment regions are validated and passed to the agents', () => {
+  const r = profileOf(persona('mateo'));
+  assert.deepEqual(r.guardrails.regions, ['canada', 'usa', 'europe']);
+  assert.deepEqual(r.preferences.regions, ['Canada', 'États-Unis', 'Europe']);
+  assert.match(profileSummary(r), /Régions visées : Canada, États-Unis, Europe/);
+  assert.throws(() => validate({ ...persona('mateo'), regions: ['mars'] }), ProfileError);
+  assert.ok(titles(profileOf({ ...persona('mateo'), regions: ['canada'] })).includes('Une seule région : Canada'));
+});
+
 test('optional answers can be skipped', () => {
-  const { capital, sectors, exclusions, ...required } = persona('mateo');
+  const { capital, sectors, regions, exclusions, ...required } = persona('mateo');
   const a = validate(required);
   assert.deepEqual(a.sectors, []);
+  assert.deepEqual(a.regions, []);
   assert.equal(a.capital, undefined);
   assert.equal(buildProfile(a).capital, null);
 });
