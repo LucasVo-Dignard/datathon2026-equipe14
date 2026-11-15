@@ -9,8 +9,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { reply, report } = require('./bot');
-const reports = require('./reports');
 const { createReportStore } = require('./reports-store');
+const { createReportGenerator, ReportError } = require('./report-generator');
+const reportSchedule = require('./report-schedule');
+const { createReportScheduleStore } = require('./report-schedule-store');
 const profile = require('./profile');
 const { createProfileStore } = require('./profile-store');
 const { createChatStore } = require('./chat-store');
@@ -67,6 +69,10 @@ const portfolioStore = createPortfolioStore({ db, saveDb });
 const portfolios = createPortfolioService({ store: portfolioStore, stocks, news: createNewsService({ pool: profiles.pool }) });
 // Rapports simulés : bucket S3 si REPORTS_BUCKET est défini, sinon le fichier JSON.
 const reportStore = createReportStore({ db, saveDb });
+const reportGenerator = createReportGenerator({ portfolios, profiles, stocks, reportStore, write: report });
+// Rapports programmés avec l'assistant : Postgres (V13) ou le fichier JSON.
+// Le job horaire (jobs/scheduled-reports.js, AWS Batch) les rédige.
+const schedules = createReportScheduleStore({ db, saveDb });
 
 // Alertes de prix par courriel (SES) : actives seulement avec Postgres et ALERTS_SENDER.
 const notifications = createNotificationsFromEnv({ pool: profiles.pool });
@@ -253,48 +259,23 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === '/api/reports') {
     if (method === 'GET') return sendJson(res, 200, await reportStore.list(user));
-    // Simulated report: { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }.
+    // Report on demand: { period: 'daily' | 'weekly' | 'monthly' | 'yearly' }.
     if (method === 'POST') {
       const { period } = await readJson(req);
-      if (!Object.hasOwn(reports.PERIODS, period)) throw new HttpError(400, 'Période invalide');
-      const portfolio = await portfolios.get(user);
-      if (!portfolio) throw new HttpError(409, 'Créez d’abord votre portefeuille (onglet Portefeuille)');
-      const investorProfile = await profiles.get(user).then((p) => p?.result || null, (err) => {
-        console.error('profile load error:', err.message);
-        return null;
-      });
-      // Period reports: each stock's own move since the start of the period.
-      const from = reports.periodFrom(portfolio, period);
-      const changes = {};
-      if (from) {
-        await Promise.all(portfolio.holdings.filter((h) => h.available).map(async (h) => {
-          changes[h.symbol] = await stocks.changeSince(h.symbol, from).catch((err) => {
-            console.error(`report change error (${h.symbol}):`, err.message);
-            return null;
-          });
-        }));
-      }
-      const brief = reports.buildBrief({ period, portfolio, profile: investorProfile, changes });
-      const highlights = reports.highlights(reports.analyze({ period, portfolio, changes, profile: investorProfile }));
-      let content;
       try {
-        content = await report({ label: reports.PERIODS[period].label, brief });
+        return sendJson(res, 201, await reportGenerator.generate(user, period));
       } catch (err) {
-        console.error('report error:', err);
-        throw new HttpError(502, "L'agent n'a pas pu rédiger le rapport, réessayez plus tard");
+        if (err instanceof ReportError) throw new HttpError(err.status, err.message);
+        throw err;
       }
-      const entry = {
-        id: crypto.randomUUID(),
-        owner: user,
-        period,
-        title: reports.PERIODS[period].title,
-        asOf: portfolio.asOf,
-        createdAt: Date.now(),
-        highlights,
-        content: String(content),
-      };
-      return sendJson(res, 201, await reportStore.save(entry));
     }
+  }
+
+  // Scheduled reports. They are set up with the assistant (tool
+  // set_report_schedule); DELETE stops them all.
+  if (pathname === '/api/report-schedule') {
+    if (method === 'GET') return sendJson(res, 200, await schedules.get(user));
+    if (method === 'DELETE') return sendJson(res, 200, await schedules.set(user, []));
   }
 
   const reportMatch = pathname.match(/^\/api\/reports\/([0-9a-f-]{36})$/);
@@ -383,6 +364,10 @@ async function handleApi(req, res, pathname) {
         console.error('portfolio load error:', err.message);
         return null;
       });
+      const currentSchedule = await schedules.get(user).catch((err) => {
+        console.error('report schedule load error:', err.message);
+        return undefined;
+      });
 
       // With "Accept: application/x-ndjson", the answer is streamed as JSON
       // lines: {"type":"progress",...} for each step of the agents, then
@@ -402,6 +387,8 @@ async function handleApi(req, res, pathname) {
           chatId: chat.id,
           profile: investorProfile,
           portfolio,
+          reportSchedule: currentSchedule,
+          saveReportSchedule: (list) => schedules.set(user, reportSchedule.validate(list)),
           onProgress: stream ? (step) => emit({ type: 'progress', ...step }) : undefined,
         });
       } catch (err) {
@@ -516,7 +503,7 @@ async function importJsonFile() {
   console.log(`fichier JSON importé dans Postgres (${JSON.stringify(counts)}), copie gardée dans ${backup}`);
 }
 
-Promise.all([sessions.init(), profiles.init(), chats.init(), portfolioStore.init()]).then(importJsonFile).then(
+Promise.all([sessions.init(), profiles.init(), chats.init(), portfolioStore.init(), schedules.init()]).then(importJsonFile).then(
   () => server.listen(PORT, () => console.log(
     `chatbot listening on :${PORT} (utilisateurs, profils, portefeuilles et conversations : ${sessions.kind}, `
     + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),

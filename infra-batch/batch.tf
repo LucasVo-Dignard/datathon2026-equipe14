@@ -75,6 +75,8 @@ resource "aws_batch_job_definition" "daily_refresh" {
       { name = "ALERTS_SENDER", value = local.alerts_sender },
       { name = "SES_CONFIGURATION_SET", value = local.alerts_sender != "" ? local.alerts_configuration_set : "" },
       { name = "APP_URL", value = "http://${data.aws_eip.web.public_ip}" },
+      # Scheduled reports (app/jobs/scheduled-reports.js): where they are saved.
+      { name = "REPORTS_BUCKET", value = data.aws_s3_bucket.reports.bucket },
     ]
 
     logConfiguration = {
@@ -138,6 +140,36 @@ resource "aws_scheduler_schedule" "news_refresh" {
       JobQueue           = aws_batch_job_queue.main.arn
       JobDefinition      = aws_batch_job_definition.daily_refresh.arn
       ContainerOverrides = { Command = ["src/marketdata/jobs/news-refresh.js"] }
+    })
+
+    retry_policy {
+      maximum_retry_attempts = 1
+    }
+  }
+}
+
+# Scheduled reports every hour (app/jobs/scheduled-reports.js): same image and
+# job definition, another command. Users choose the day and the hour of their
+# reports with the assistant; each run writes the reports that are due, so a
+# run with nothing due takes a few seconds.
+resource "aws_scheduler_schedule" "scheduled_reports" {
+  name                         = "${local.prefix}-scheduled-reports"
+  schedule_expression          = var.reports_schedule_expression
+  schedule_expression_timezone = var.schedule_timezone
+  state                        = local.reports_schedule_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:batch:submitJob"
+    role_arn = aws_iam_role.scheduler.arn
+    input = jsonencode({
+      JobName            = "scheduled-reports"
+      JobQueue           = aws_batch_job_queue.main.arn
+      JobDefinition      = aws_batch_job_definition.daily_refresh.arn
+      ContainerOverrides = { Command = ["app/jobs/scheduled-reports.js"] }
     })
 
     retry_policy {

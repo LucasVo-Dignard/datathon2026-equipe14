@@ -27,3 +27,8 @@ output "schedule" {
   description = "When the job runs."
   value       = "${var.schedule_expression} ${var.schedule_timezone} (${local.schedule_enabled ? "enabled" : "paused"})"
 }
+
+output "reports_schedule" {
+  description = "When the scheduled reports job runs."
+  value       = "${var.reports_schedule_expression} ${var.schedule_timezone} (${local.reports_schedule_enabled ? "enabled" : "paused"})"
+}

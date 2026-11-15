@@ -409,6 +409,33 @@ body.resizing iframe, body.resizing .chart { pointer-events: none; }
 .report-md tbody tr:nth-child(even) td { background: var(--page); }
 .report-delete { padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-size: 0.85rem; }
 .report-delete:hover { color: var(--down); }
+.report-schedule { margin-top: 12px; }
+.report-schedule h2 { font-size: 1.05rem; }
+.report-schedule-list { margin: 0 0 6px; padding-left: 20px; }
+.report-schedule-list:empty { display: none; }
+.report-schedule-list li { margin: 2px 0; }
+.report-schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.report-schedule-actions .primary { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.report-now-title { font-size: 1.05rem; margin: 20px 0 0; }
+.report .tag.scheduled { vertical-align: 2px; background: var(--hover); color: var(--text-2); }
+.report .badge.new { vertical-align: 2px; }
+.report.highlight { outline: 2px solid var(--accent); outline-offset: 2px; transition: outline-color 0.4s; }
+.report .card-head { margin-bottom: 0; }
+.report-body { margin-top: 16px; }
+.report-body[hidden] { display: none; }
+.report-toggle {
+  border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.report-toggle::before {
+  content: ""; width: 7px; height: 7px; border-right: 2px solid var(--text-2); border-bottom: 2px solid var(--text-2);
+  transform: rotate(-45deg); transition: transform 0.15s; flex-shrink: 0;
+}
+.report-toggle[aria-expanded="true"]::before { transform: rotate(45deg); }
+.report-toggle:hover { color: var(--accent); }
+.badge.new { --lvl: var(--accent); }
+.badge-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); vertical-align: 2px; }
+.badge-dot[hidden], .badge[hidden] { display: none; }
 
 /* ----------------------------------------------------- Investor profile */
 .badge {
@@ -549,6 +576,17 @@ body.resizing iframe, body.resizing .chart { pointer-events: none; }
 .empty { height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 16px; text-align: center; }
 .empty h3 { font-size: 1.1rem; font-weight: 600; color: var(--text-2); }
 .empty p { margin: 0; }
+.suggestions { justify-content: center; margin-top: 10px; }
+.suggestions[hidden] { display: none; }
+.suggestions button { font-size: 0.85rem; color: var(--text); min-height: 34px; padding: 6px 14px; }
+.suggestions button:hover { border-color: var(--accent); color: var(--accent); }
+.report-notice {
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; font-size: 0.9rem;
+  background: var(--accent-tint); border-bottom: 1px solid var(--border);
+}
+.report-notice[hidden] { display: none; }
+.report-notice span { flex: 1; min-width: 0; }
+.report-notice a { color: var(--accent); font-weight: 600; white-space: nowrap; }
 .msg { margin: 0 0 12px; padding: 0 14px; display: flex; }
 .msg .bubble { line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { justify-content: flex-end; }

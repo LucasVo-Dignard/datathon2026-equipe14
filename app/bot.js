@@ -22,6 +22,9 @@
 //                la base (secteur, industrie, pays) par portfolio-context.js : un
 //                résumé est ajouté au prompt système, le détail est donné par
 //                l'outil get_portfolio_details.
+//   - reportSchedule, saveReportSchedule : les rapports programmés du client
+//                (report-schedule-store.js) et la fonction qui les remplace,
+//                appelée par l'outil set_report_schedule.
 // et retourne le texte de la réponse, en Markdown.
 //
 // report() rédige un rapport (quotidien, hebdomadaire, mensuel ou annuel), en
@@ -91,6 +94,16 @@ Citations : quand une information vient du rapport de recherche, cite sa source 
 - Une information appuyée par deux sources reçoit deux boutons côte à côte. Si une source n'a pas d'URL, écris [@Nom court](#).
 - N'ajoute pas de bouton aux phrases qui ne viennent pas du rapport (tes explications générales).
 - Termine, sur une ligne à part et en italique, en indiquant d'où viennent les données : communiqué officiel ou recherche déjà enregistrée (base de connaissances), Bigdata.com ou web.`;
+
+// Setup of the scheduled reports, with set_report_schedule.
+const SCHEDULE_SYSTEM = `Rapports programmés : l'application peut rédiger automatiquement des rapports sur le portefeuille du client : quotidien (du lundi au vendredi), hebdomadaire, mensuel ou annuel, un ou plusieurs. Ils arrivent dans l'onglet Rapports, et l'application signale chaque nouveau rapport avec un lien pour l'ouvrir. Leur programmation actuelle figure ci-dessous.
+Quand le client veut configurer ses notifications (par exemple « Configurer les notifications »), ou créer, modifier ou arrêter ses rapports :
+1. Demande-lui d'abord s'il souhaite recevoir des rapports périodiques sur son portefeuille et lesquels (liste courte des quatre choix, avec ce que chacun couvre en quelques mots).
+2. Puis demande quand : l'heure (heure de l'Est, à l'heure pile), et le jour selon le rapport (jour de la semaine pour l'hebdomadaire, jour du mois de 1 à 28 pour le mensuel, date pour l'annuel). Propose une valeur par défaut simple, par exemple le quotidien à 18 h après la fermeture des marchés, l'hebdomadaire le lundi à 7 h, le mensuel le 1er à 8 h, l'annuel le 2 janvier à 8 h.
+3. Une question courte à la fois. Ne redemande pas ce que le client a déjà précisé ; s'il accepte tes valeurs par défaut (« oui », « ça me va »), utilise-les.
+4. Appelle ensuite set_report_schedule avec la liste complète des rapports voulus (elle remplace la précédente : garde ceux qu'il ne change pas) ; une liste vide s'il ne veut aucun rapport. Confirme alors en une ou deux phrases ce qui est programmé et que les rapports arriveront dans l'onglet Rapports.
+5. Termine en mentionnant en une phrase que les alertes de prix par courriel se règlent dans l'onglet Mon profil.
+Ne parle pas de la programmation des rapports si le client n'aborde pas le sujet.`;
 
 const REPORT_SYSTEM = `Tu es l'assistant de « Mon portefeuille », une application qui aide des clients de Banque Nationale Courtage Direct, souvent pressés ou peu experts, à suivre leurs placements.
 Tu rédiges en français un rapport périodique sur le portefeuille du client, à partir uniquement de la fiche de données fournie (performance, positions, expositions sectorielle, régionale et par devise, actualités, profil investisseur). N'invente aucun chiffre ni aucune nouvelle ; si une donnée manque, dis-le.
@@ -195,6 +208,48 @@ const PORTFOLIO_TOOL = {
   input_schema: { type: 'object', properties: {}, additionalProperties: false },
 };
 
+const SCHEDULE_TOOL = {
+  name: 'set_report_schedule',
+  description:
+    'Save which automatic portfolio reports the client receives and when (Eastern time, America/Toronto). ' +
+    'Replaces the whole current list: include the reports to keep. Pass an empty list when the client wants no ' +
+    'report. Call it only once the client has said which reports they want and when (or accepted your defaults).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      schedules: {
+        type: 'array',
+        description: 'Every report the client wants, at most one per period.',
+        items: {
+          type: 'object',
+          properties: {
+            period: {
+              type: 'string',
+              enum: ['daily', 'weekly', 'monthly', 'yearly'],
+              description: 'daily runs Monday to Friday; weekly needs weekday; monthly needs day; yearly needs month and day.',
+            },
+            hour: { type: 'integer', minimum: 0, maximum: 23, description: 'Hour of the day, 0 to 23 (e.g. 18 for 6 p.m.).' },
+            weekday: { type: 'integer', minimum: 1, maximum: 7, description: 'weekly only: 1 = Monday ... 7 = Sunday.' },
+            day: { type: 'integer', minimum: 1, maximum: 28, description: 'monthly and yearly only: day of the month, 1 to 28.' },
+            month: { type: 'integer', minimum: 1, maximum: 12, description: 'yearly only: month, 1 = January.' },
+          },
+          required: ['period', 'hour'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['schedules'],
+    additionalProperties: false,
+  },
+};
+
+function scheduleSummary(schedule) {
+  if (schedule === undefined) return 'Rapports programmés du client : indisponibles pour le moment (erreur de chargement).';
+  if (!schedule?.configured) return 'Rapports programmés du client : pas encore configurés.';
+  if (!schedule.schedules.length) return 'Rapports programmés du client : aucun (le client n\'en veut pas pour le moment).';
+  return `Rapports programmés du client (heure de l'Est) :\n${schedule.schedules.map((s) => `- ${s.label}`).join('\n')}`;
+}
+
 let client = null;
 function getClient() {
   // Created on first use so the server starts even without AWS credentials.
@@ -262,6 +317,7 @@ function sourceTrail(update) {
 async function runTool(block, progress, ctx) {
   const fail = (content) => ({ result: { type: 'tool_result', tool_use_id: block.id, is_error: true, content }, research: null });
   if (block.name === 'find_similar_companies') return runSimilar(block, progress, fail);
+  if (block.name === 'set_report_schedule') return runSchedule(block, progress, ctx, fail);
   if (block.name === 'get_portfolio_details') {
     progress(`portfolio-${block.id}`, 'Lecture de votre portefeuille', 'done',
       ctx.portfolioView ? `${ctx.portfolioView.summary.positions} position(s)` : 'pas encore créé');
@@ -291,6 +347,27 @@ async function runTool(block, progress, ctx) {
     console.error('research error:', err.message);
     progress(id, label, 'error', 'échec de la recherche');
     return fail(`Research failed: ${err.message}`);
+  }
+}
+
+// Scheduled reports: saved through the server (validation there, see report-schedule.js).
+async function runSchedule(block, progress, ctx, fail) {
+  const id = `schedule-${block.id}`;
+  const label = 'Programmation de vos rapports';
+  if (!ctx.saveReportSchedule) return fail('Report scheduling is not available here: tell the client to try again later.');
+  progress(id, label, 'active');
+  try {
+    const saved = await ctx.saveReportSchedule(block.input?.schedules);
+    ctx.reportSchedule = saved;
+    progress(id, label, 'done', saved.schedules.length ? `${saved.schedules.length} rapport(s) programmé(s)` : 'aucun rapport');
+    return {
+      result: { type: 'tool_result', tool_use_id: block.id, content: `Saved. ${scheduleSummary(saved)}` },
+      research: null,
+    };
+  } catch (err) {
+    console.error('report schedule error:', err.message);
+    progress(id, label, 'error', 'non enregistrée');
+    return fail(`Not saved: ${err.message}`);
   }
 }
 
@@ -346,7 +423,7 @@ async function addPeerReview(results, judgments, progress, portfolioText) {
   }
 }
 
-async function reply({ messages, chatId, profile, portfolio, onProgress }) {
+async function reply({ messages, chatId, profile, portfolio, reportSchedule, saveReportSchedule, onProgress }) {
   const progress = makeProgress(onProgress);
   // The logged-in client's portfolio, enriched with the database (sector,
   // industry, country, guardrail checks). Loaded once per answer.
@@ -357,7 +434,7 @@ async function reply({ messages, chatId, profile, portfolio, onProgress }) {
   const portfolioText = portfolioView === undefined
     ? 'Portefeuille du client : indisponible pour le moment (erreur de chargement).'
     : portfolioContext.summary(portfolioView);
-  const ctx = { portfolioView: portfolioView || null };
+  const ctx = { portfolioView: portfolioView || null, reportSchedule, saveReportSchedule };
   if (!fallbackStates.has(chatId)) fallbackStates.set(chatId, new BetaFallbackState());
 
   // The history must start with a user turn: drop leading assistant messages
@@ -367,14 +444,17 @@ async function reply({ messages, chatId, profile, portfolio, onProgress }) {
 
   const tools = [
     PORTFOLIO_TOOL,
+    ...(saveReportSchedule ? [SCHEDULE_TOOL] : []),
     ...(peers.isEnabled() ? [SIMILAR_TOOL] : []),
     ...(research.isEnabled() ? [RESEARCH_TOOL] : []),
   ];
   const system = [
     // Stable instructions first, then the per-user profile.
     { type: 'text', text: SYSTEM },
+    { type: 'text', text: SCHEDULE_SYSTEM },
     { type: 'text', text: `Profil investisseur du client :\n${profileSummary(profile)}` },
     { type: 'text', text: portfolioText },
+    { type: 'text', text: scheduleSummary(reportSchedule) },
   ];
   if (!research.isEnabled()) {
     system.push({ type: 'text', text: "L'outil research_company n'est pas disponible dans cet environnement." });

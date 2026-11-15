@@ -70,3 +70,15 @@ variable "news_schedule_expression" {
   default     = "cron(0 7-23/2 * * ? *)"
 }
 
+variable "reports_schedule_expression" {
+  description = "When the scheduled reports job runs, in schedule_timezone. Default: every hour on the hour, since users pick the hour of their reports."
+  type        = string
+  default     = "cron(0 * * * ? *)"
+}
+
+variable "reports_schedule_enabled" {
+  description = "Set to false to pause the scheduled reports, or true to run them in a dev environment. Default: same as schedule_enabled."
+  type        = bool
+  default     = null
+}
+

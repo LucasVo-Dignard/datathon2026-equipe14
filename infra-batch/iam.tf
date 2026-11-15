@@ -2,7 +2,8 @@
 # Three roles, each with only what it needs:
 # - execution role: used by Fargate to pull the image (batch ECR repo only)
 #                   and write logs (this job's log group only)
-# - job role:       used by our code; can only read the DB secret
+# - job role:       used by our code: DB secret, Comprehend, SES (alerts),
+#                   Bedrock and the reports bucket (scheduled reports)
 # - scheduler role: used by EventBridge Scheduler; can only submit this job
 # ---------------------------------------------------------------------------
 
@@ -83,6 +84,32 @@ data "aws_iam_policy_document" "job" {
         values   = [local.alerts_sender]
       }
     }
+  }
+
+  # Scheduled reports job: Claude writes the report (app/bot.js, Claude in
+  # Amazon Bedrock, like the web server) ...
+  statement {
+    sid       = "WriteReportsWithClaude"
+    actions   = ["bedrock-mantle:CreateInference"]
+    resources = ["*"]
+  }
+
+  # ... and it is saved in the reports bucket (../infra/reports.tf), the same
+  # access as the web server: list, read, write and delete under reports/ only.
+  statement {
+    sid       = "ListReports"
+    actions   = ["s3:ListBucket"]
+    resources = [data.aws_s3_bucket.reports.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["reports/*"]
+    }
+  }
+  statement {
+    sid       = "ReadWriteReports"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${data.aws_s3_bucket.reports.arn}/reports/*"]
   }
 }
 

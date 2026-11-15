@@ -41,12 +41,15 @@ async function showApp(username) {
   const savedTab = sessionStorage.getItem('tab');
   if (savedTab) $('app-view').dataset.tab = savedTab; // avoid flashing the default tab while loading
   window.Dashboard.load();
-  const [chats, hasProfile] = await Promise.all([api('GET', '/api/chats'), window.Profile.init()]);
+  const [chats, hasProfile] = await Promise.all([
+    api('GET', '/api/chats'), window.Profile.init(), window.Reports.init(username),
+  ]);
   // Refresh: stay on the same tab. First visit: guide the user through the investor-profile questionnaire.
   setTab(savedTab || (hasProfile ? 'portfolio' : 'profile'));
   state.chats = chats;
   if (state.chats.length) await openChat(state.chats[0].id);
   else newChat();
+  window.Reports.openFromHash(); // link to a report (#rapport/<id>)
 }
 
 // Tabs: portfolio | profile | assistant. On desktop the left pane shows the
@@ -292,6 +295,32 @@ function renderMessages(messages) {
   scrollMessages();
 }
 
+// Prompt suggestions under "Posez une question" (new conversation only).
+const SETUP_PROMPT = 'Configurer les notifications';
+
+function renderSuggestions(schedule = window.Reports.schedule()) {
+  const box = $('suggestions');
+  const prompts = schedule && !schedule.configured ? [SETUP_PROMPT] : [];
+  box.replaceChildren(...prompts.map((text) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.onclick = () => ask(text);
+    return b;
+  }));
+  box.hidden = !prompts.length;
+}
+
+// Sends `text` in a new conversation (used by suggestions and the Reports tab).
+function ask(text) {
+  if (state.sending) return;
+  if (state.currentId) newChat();
+  if (mobileQuery.matches) setTab('assistant');
+  $('input').value = text;
+  send();
+}
+window.Assistant = { ask };
+
 function appendMessage(node) {
   emptyEl.hidden = true;
   $('messages').append(node);
@@ -412,6 +441,7 @@ async function send() {
     pendingEl.replaceWith(messageEl('assistant', messages[1].content, false, true));
     setTitle(chat.title);
     upsertSummary(chat);
+    window.Reports.refreshSchedule(); // the assistant may have just set up the reports
   } catch (err) {
     pendingEl.replaceWith(messageEl('assistant', `⚠ ${err.message}`, true));
   } finally {
@@ -469,6 +499,8 @@ window.addEventListener('profile:done', () => {
   setTab(mobileQuery.matches ? 'assistant' : 'portfolio');
   focusInput();
 });
+
+window.addEventListener('reports:schedule', (e) => renderSuggestions(e.detail));
 
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();

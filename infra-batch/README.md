@@ -31,11 +31,17 @@ It creates:
   `src/marketdata/jobs/news-refresh.js`; the job role may call Amazon
   Comprehend's batch detect APIs (sentiment, entities)
   (prod only by default; paused in developer environments)
+- a third schedule, **scheduled reports**, every hour (`reports_schedule_expression`,
+  `reports_schedule_enabled`): command `app/jobs/scheduled-reports.js`. It
+  writes the reports users set up with the assistant (table `report_schedules`,
+  V13) into the reports bucket of `../infra` (`REPORTS_BUCKET`). The job role
+  may call Claude in Amazon Bedrock and read/write `reports/*` in that bucket.
+  Manual run: `--container-overrides '{"command":["app/jobs/scheduled-reports.js","--dry-run"]}'`
 - a **security group** for the job, plus one ingress rule on the DB security
   group that allows it
 - three IAM roles: execution (pull from the batch ECR repo, write to this
-  job's log group), job (read the DB secret only), scheduler (submit this
-  job only)
+  job's log group), job (DB secret, Comprehend, SES, Bedrock, reports bucket),
+  scheduler (submit this job only)
 - a CloudWatch log group (14 days)
 
 The VPC, public subnet, RDS instance and DB security group are looked up by

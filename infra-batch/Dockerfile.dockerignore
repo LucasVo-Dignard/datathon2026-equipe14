@@ -1,7 +1,11 @@
 # Used instead of the root .dockerignore when building infra-batch/Dockerfile.
-# Allowlist: only the npm manifests and src/ go into the image. Everything
-# else, in particular .env-aws, *.pem keys and Terraform state, stays out.
+# Allowlist: only the npm manifests, src/ and the app's server code (for the
+# scheduled reports job) go into the image. Everything else, in particular
+# .env-aws, *.pem keys, Terraform state and the app's local data, stays out.
 *
 !package.json
 !package-lock.json
 !src/
+!app/
+app/data/
+app/public/
