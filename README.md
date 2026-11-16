@@ -218,7 +218,7 @@ Ce qui fonctionne : la connexion, le profil, un portefeuille aléatoire avec de
 vrais cours Yahoo. Sans AWS, pas d'assistant, de rapports, de recherche ni d'alertes ;
 sans base, les news sont des exemples.
 
-### 2. En local avec AWS
+### 2. En local avec AWS (Recommandé pour tester les agents)
 
 L'app tourne sur ta machine, mais appelle des services AWS : Bedrock (assistant,
 rapports), AgentCore (recherche), Comprehend (ton des news) et SES (alertes).
