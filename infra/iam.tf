@@ -90,6 +90,38 @@ resource "aws_iam_role_policy" "web_research_gateway" {
   })
 }
 
+# At startup the app finds this environment's research agents by name
+# (RESEARCH_ENV, app/research.js). Read-only; the list actions don't support
+# resource-level permissions.
+resource "aws_iam_role_policy" "web_research_lookup" {
+  name = "find-research-agents"
+  role = aws_iam_role.web.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ListAgents"
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:ListHarnesses", "bedrock-agentcore:ListGateways", "bedrock:ListKnowledgeBases"]
+        Resource = "*"
+      },
+      {
+        Sid      = "ReadGateway"
+        Effect   = "Allow"
+        Action   = "bedrock-agentcore:GetGateway"
+        Resource = "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:gateway/${local.prefix}-research-*"
+      },
+      {
+        Sid      = "ReadDataSource"
+        Effect   = "Allow"
+        Action   = ["bedrock:ListDataSources", "bedrock:GetDataSource"]
+        Resource = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
+      },
+    ]
+  })
+}
+
 # The research agent saves the reports that used Bigdata.com to the earnings
 # knowledge base (app/research.js), so the same question costs no credits
 # next time. Bucket and knowledge base are created by ../infra-agents;

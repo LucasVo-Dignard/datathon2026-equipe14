@@ -1,5 +1,7 @@
 # app/ is embedded in the EC2 user_data (infra/main.tf). Same bytes on every OS,
 # otherwise a Windows checkout (CRLF) changes user_data and replaces the instance.
 app/** text eol=lf
+# user_data of the EC2 (infra/main.tf): CRLF would replace the instance.
+infra/*.tftpl text eol=lf
 # Harness prompts (infra-agents/harnesses.tf): a CRLF checkout would update them.
 agents/prompts/** text eol=lf

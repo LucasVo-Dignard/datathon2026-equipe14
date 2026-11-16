@@ -3,7 +3,7 @@
 # Bigdata.com key, research and reviewer harnesses. See ../README.md.
 #
 # The web server's permissions to call them are in ../infra/iam.tf, and
-# ../scripts/deploy-app.sh finds them by name, so keep the names below.
+# ../app/research.js finds them by name at startup, so keep the names below.
 # ---------------------------------------------------------------------------
 
 data "aws_caller_identity" "current" {}

@@ -1,5 +1,5 @@
 variable "project_name" {
-  description = "Prefix used for resource names and tags. Must match the other stacks: ../infra/iam.tf and ../scripts/deploy-app.sh find these resources by name."
+  description = "Prefix used for resource names and tags. Must match the other stacks: ../infra/iam.tf and ../app/research.js find these resources by name."
   type        = string
   default     = "datathon2026-equipe14"
 }

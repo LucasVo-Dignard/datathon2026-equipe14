@@ -24,7 +24,12 @@
 //     same question is answered from it next time, at no cost.
 //
 // Configuration (environment variables):
-//   RESEARCH_HARNESS_ARN        harness to invoke (unset = research disabled)
+//   RESEARCH_ENV                environment whose agents to use: prod, lucas,
+//                               andre or youcef (unset = research disabled).
+//                               init() finds them by name, like the resources
+//                               of infra-agents are named.
+// Or, instead of RESEARCH_ENV, each value directly:
+//   RESEARCH_HARNESS_ARN        harness to invoke
 //   RESEARCH_REVIEWER_ARN       peer-review harness, used for judgment requests
 //                               only (unset = no review)
 //   RESEARCH_KB_BUCKET, RESEARCH_KB_ID, RESEARCH_KB_DATA_SOURCE_ID
@@ -39,15 +44,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { BedrockAgentCoreClient, InvokeHarnessCommand } = require('@aws-sdk/client-bedrock-agentcore');
 
-const HARNESS_ARN = process.env.RESEARCH_HARNESS_ARN || '';
-const REVIEWER_ARN = process.env.RESEARCH_REVIEWER_ARN || '';
+const PROJECT = 'datathon2026-equipe14';
 const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
-const KB = {
-  bucket: process.env.RESEARCH_KB_BUCKET || '',
-  id: process.env.RESEARCH_KB_ID || '',
-  dataSourceId: process.env.RESEARCH_KB_DATA_SOURCE_ID || '',
+const config = {
+  harnessArn: process.env.RESEARCH_HARNESS_ARN || '',
+  reviewerArn: process.env.RESEARCH_REVIEWER_ARN || '',
+  gatewayUrl: process.env.RESEARCH_GATEWAY_URL || '',
+  kb: {
+    bucket: process.env.RESEARCH_KB_BUCKET || '',
+    id: process.env.RESEARCH_KB_ID || '',
+    dataSourceId: process.env.RESEARCH_KB_DATA_SOURCE_ID || '',
+  },
 };
-const GATEWAY_URL = process.env.RESEARCH_GATEWAY_URL || '';
 const MARKET_FILE = path.join(
   path.dirname(process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json')), 'bigdata-market.json');
 // Sections of the market tearsheet given to the researches ("## part / ### section"):
@@ -79,8 +87,89 @@ const ALL_TOOLS = [TOOLS_WITHOUT_BIGDATA[0], ...BIGDATA_TOOLS, TOOLS_WITHOUT_BIG
 let client = null;
 const getClient = () => (client ??= new BedrockAgentCoreClient({ region: REGION }));
 
-const isEnabled = () => Boolean(HARNESS_ARN);
+const isEnabled = () => Boolean(config.harnessArn);
 const today = () => new Date().toISOString().slice(0, 10);
+
+// ---------------------------------------------------------------------------
+// Finding the agents of an environment by name (RESEARCH_ENV)
+// ---------------------------------------------------------------------------
+
+// Same naming as infra-agents: datathon2026-equipe14[-<env>]-research...
+const prefixOf = (envName) => (envName === 'prod' ? PROJECT : `${PROJECT}-${envName}`);
+
+async function listAll(client, Command, key, input = {}) {
+  const items = [];
+  let nextToken;
+  do {
+    const out = await client.send(new Command({ ...input, nextToken }));
+    items.push(...(out[key] ?? []));
+    nextToken = out.nextToken;
+  } while (nextToken);
+  return items;
+}
+
+/**
+ * Looks up the research resources of the environment with this prefix and
+ * returns the values of `config` it found (missing resources stay empty).
+ * clients: { control, agent } (AgentCore control and Bedrock Agent SDK
+ * clients), injected by the tests.
+ */
+async function lookupConfig(prefix, clients = {}) {
+  const control = require('@aws-sdk/client-bedrock-agentcore-control');
+  const agent = require('@aws-sdk/client-bedrock-agent');
+  const ctl = clients.control ?? new control.BedrockAgentCoreControlClient({ region: REGION });
+  const kbs = clients.agent ?? new agent.BedrockAgentClient({ region: REGION });
+  const harnessPrefix = prefix.replaceAll('-', '_');
+
+  const found = { kb: {} };
+  const harnesses = await listAll(ctl, control.ListHarnessesCommand, 'harnesses');
+  found.harnessArn = harnesses.find((h) => h.harnessName === `${harnessPrefix}_research`)?.arn || '';
+  found.reviewerArn = harnesses.find((h) => h.harnessName === `${harnessPrefix}_reviewer`)?.arn || '';
+
+  const gateway = (await listAll(ctl, control.ListGatewaysCommand, 'items')).find((g) => g.name === `${prefix}-research`);
+  if (gateway) {
+    found.gatewayUrl = (await ctl.send(new control.GetGatewayCommand({ gatewayIdentifier: gateway.gatewayId }))).gatewayUrl || '';
+  }
+
+  const kb = (await listAll(kbs, agent.ListKnowledgeBasesCommand, 'knowledgeBaseSummaries')).find((k) => k.name === `${prefix}-earnings`);
+  if (kb) {
+    const [source] = await listAll(kbs, agent.ListDataSourcesCommand, 'dataSourceSummaries', { knowledgeBaseId: kb.knowledgeBaseId });
+    if (source) {
+      const { dataSource } = await kbs.send(new agent.GetDataSourceCommand({
+        knowledgeBaseId: kb.knowledgeBaseId, dataSourceId: source.dataSourceId,
+      }));
+      const params = dataSource?.dataSourceConfiguration?.managedKnowledgeBaseConnectorConfiguration?.connectorParameters;
+      const bucket = params
+        ? JSON.parse(params).connectionConfiguration?.bucketName
+        : dataSource?.dataSourceConfiguration?.s3Configuration?.bucketArn?.split(':::')[1];
+      found.kb = { bucket: bucket || '', id: kb.knowledgeBaseId, dataSourceId: source.dataSourceId };
+    }
+  }
+  return found;
+}
+
+let ready = null;
+
+/**
+ * With RESEARCH_ENV (and no RESEARCH_HARNESS_ARN), finds the agents of that
+ * environment. Called once at startup; never throws: on an error, research
+ * stays disabled. Returns a one-line status for the startup log.
+ */
+function init({ env = process.env, log = console, clients } = {}) {
+  ready ??= (async () => {
+    const envName = (env.RESEARCH_ENV || '').trim();
+    if (envName && !config.harnessArn) {
+      try {
+        Object.assign(config, await lookupConfig(prefixOf(envName), clients));
+      } catch (err) {
+        log.error(`recherche : agents de ${envName} introuvables (${err.name}: ${err.message})`);
+      }
+    }
+    if (!config.harnessArn) return 'désactivée';
+    return `active${envName ? ` (${envName})` : ''}, relecture ${config.reviewerArn ? 'active' : 'désactivée'}`;
+  })();
+  return ready;
+}
 
 // ---------------------------------------------------------------------------
 // Daily market snapshot (Bigdata.com market tearsheet)
@@ -132,7 +221,7 @@ async function callGatewayTool(name, args = {}) {
   const { defaultProvider } = require('@aws-sdk/credential-provider-node');
   signer ??= new SignatureV4({ credentials: defaultProvider(), region: REGION, service: 'bedrock-agentcore', sha256: Sha256 });
 
-  const url = new URL(GATEWAY_URL);
+  const url = new URL(config.gatewayUrl);
   const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
   const request = await signer.sign({
     method: 'POST',
@@ -169,7 +258,7 @@ let marketFetch = null;
  * research then goes on without it.
  */
 async function marketSnapshot() {
-  if (!GATEWAY_URL) return null;
+  if (!config.gatewayUrl) return null;
   const saved = readMarketFile();
   if (saved) return { ...saved, fetched: false };
   if (marketFetch) return marketFetch;
@@ -204,6 +293,7 @@ let s3 = null;
 let bedrockAgent = null;
 
 async function saveToKnowledgeBase({ ticker, company, question, report }) {
+  const KB = config.kb;
   if (!KB.bucket || !KB.id || !KB.dataSourceId || !ticker) return false;
   // Loaded only when saving is configured.
   const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -290,7 +380,7 @@ async function runHarness(harnessArn, prompt, extra = {}, onTool = null) {
  * market is "cache" or "fetched" when the snapshot was given, null otherwise.
  */
 async function researchCompany({ company, ticker, question, kind = 'factual', marketContext = false, onTool = null }) {
-  if (!isEnabled()) throw new Error('RESEARCH_HARNESS_ARN is not set');
+  if (!isEnabled()) throw new Error('research is not configured (RESEARCH_ENV)');
   const subject = ticker ? `${company} (${ticker})` : company;
   const market = marketContext || kind === 'judgment' ? await marketSnapshot() : null;
   const balance = kind === 'judgment'
@@ -303,11 +393,11 @@ async function researchCompany({ company, ticker, question, kind = 'factual', ma
     : '';
   // With the daily snapshot configured, the agent never buys the market
   // tearsheet itself.
-  const allowedTools = GATEWAY_URL ? ALL_TOOLS.filter((tool) => tool !== MARKET_TOOL) : null;
+  const allowedTools = config.gatewayUrl ? ALL_TOOLS.filter((tool) => tool !== MARKET_TOOL) : null;
 
   // The harness has no clock: give it today's date so "latest" is resolved correctly.
   const { text: report, tools, stopReason } = await runHarness(
-    HARNESS_ARN,
+    config.harnessArn,
     `Today's date: ${today()}\nCompany: ${subject}\nQuestion: ${question}${balance}${marketText}`,
     allowedTools ? { allowedTools } : {},
     onTool,
@@ -334,19 +424,19 @@ async function researchCompany({ company, ticker, question, kind = 'factual', ma
 // Peer review (judgment requests only)
 // ---------------------------------------------------------------------------
 
-const isReviewEnabled = () => Boolean(REVIEWER_ARN);
+const isReviewEnabled = () => Boolean(config.reviewerArn);
 
 /**
  * Peer-reviews the data the research agent selected for a proposal. Returns
  * { review, tools }: review starts with "VERDICT: SOLID | PARTIAL | WEAK".
  */
 async function reviewResearch({ proposal, reports, portfolio = '', onTool = null }) {
-  if (!isReviewEnabled()) throw new Error('RESEARCH_REVIEWER_ARN is not set');
+  if (!isReviewEnabled()) throw new Error('no reviewer harness');
   const body = reports
     .map((r, i) => `=== Report ${i + 1}: ${r.subject} (question: ${r.question}) ===\n${r.report}`)
     .join('\n\n');
   const { text: review, tools, stopReason } = await runHarness(
-    REVIEWER_ARN,
+    config.reviewerArn,
     `Today's date: ${today()}\nInvestor's proposal or question: ${proposal}\n\n`
       + (portfolio
         ? `Investor's current portfolio (judge the data also against it: concentration, sector exposure, effect of the proposal):\n${portfolio}\n\n`
@@ -359,4 +449,4 @@ async function reviewResearch({ proposal, reports, portfolio = '', onTool = null
   return { review, tools };
 }
 
-module.exports = { researchCompany, reviewResearch, marketSnapshot, marketExtract, isEnabled, isReviewEnabled };
+module.exports = { init, lookupConfig, researchCompany, reviewResearch, marketSnapshot, marketExtract, isEnabled, isReviewEnabled };

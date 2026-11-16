@@ -25,6 +25,7 @@ const { createPortfolioService, PortfolioError } = require('./portfolio');
 const { createStockLookup, normalizeSymbol } = require('./stocks');
 const { createNotificationsFromEnv, NotificationError } = require('./notifications');
 const { createNewsService } = require('./news');
+const research = require('./research');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json');
@@ -495,10 +496,12 @@ async function importJsonFile() {
   console.log(`fichier JSON importé dans Postgres (${JSON.stringify(counts)}), copie gardée dans ${backup}`);
 }
 
-Promise.all([sessions.init(), profiles.init(), chats.init(), portfolioStore.init(), schedules.init()]).then(importJsonFile).then(
-  () => server.listen(PORT, () => console.log(
+Promise.all([sessions.init(), profiles.init(), chats.init(), portfolioStore.init(), schedules.init()]).then(importJsonFile)
+  .then(() => research.init()).then(
+  (researchStatus) => server.listen(PORT, () => console.log(
     `chatbot listening on :${PORT} (utilisateurs, profils, portefeuilles et conversations : ${sessions.kind}, `
-    + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'})`)),
+    + `rapports : ${reportStore.kind}, alertes SES : ${notifications.enabled ? 'actives' : 'désactivées'}, `
+    + `recherche : ${researchStatus})`)),
   (err) => {
     console.error(`Impossible d'initialiser le stockage (${sessions.kind}) :`, err.message || err.code || err);
     process.exit(1);

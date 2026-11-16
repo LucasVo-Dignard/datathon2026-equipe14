@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { marketExtract } = require('../app/research');
+const { marketExtract, lookupConfig } = require('../app/research');
 
 const TEARSHEET = [
   '*Last Updated: November 15, 2026*',
@@ -45,4 +45,55 @@ test('marketExtract drops the other sections and parts', () => {
   // A part heading is kept once, before its first kept section.
   assert.equal(text.match(/## Equity Factors/g).length, 1);
   assert.ok(text.indexOf('## Equity Factors') < text.indexOf('### Style'));
+});
+
+// Fake SDK client: answers each command by its class name.
+const fakeClient = (answers) => ({
+  async send(command) {
+    const answer = answers[command.constructor.name];
+    if (!answer) throw new Error(`unexpected ${command.constructor.name}`);
+    return typeof answer === 'function' ? answer(command.input) : answer;
+  },
+});
+
+const PROD_CLIENTS = {
+  control: fakeClient({
+    // Two pages, to check the pagination.
+    ListHarnessesCommand: ({ nextToken }) => (nextToken
+      ? { harnesses: [{ harnessName: 'datathon2026_equipe14_reviewer', arn: 'arn:reviewer' }] }
+      : {
+        harnesses: [
+          { harnessName: 'datathon2026_equipe14_andre_research', arn: 'arn:andre' },
+          { harnessName: 'datathon2026_equipe14_research', arn: 'arn:research' },
+        ],
+        nextToken: 'page2',
+      }),
+    ListGatewaysCommand: { items: [
+      { name: 'datathon2026-equipe14-andre-research', gatewayId: 'gw-andre' },
+      { name: 'datathon2026-equipe14-research', gatewayId: 'gw-prod' },
+    ] },
+    GetGatewayCommand: ({ gatewayIdentifier }) => ({ gatewayUrl: `https://${gatewayIdentifier}/mcp` }),
+  }),
+  agent: fakeClient({
+    ListKnowledgeBasesCommand: { knowledgeBaseSummaries: [{ name: 'datathon2026-equipe14-earnings', knowledgeBaseId: 'KB1' }] },
+    ListDataSourcesCommand: ({ knowledgeBaseId }) => ({ dataSourceSummaries: [{ dataSourceId: `DS-${knowledgeBaseId}` }] }),
+    GetDataSourceCommand: { dataSource: { dataSourceConfiguration: { managedKnowledgeBaseConnectorConfiguration: {
+      connectorParameters: JSON.stringify({ connectionConfiguration: { bucketName: 'earnings-bucket' } }),
+    } } } },
+  }),
+};
+
+test('lookupConfig finds the agents of an environment by name', async () => {
+  assert.deepEqual(await lookupConfig('datathon2026-equipe14', PROD_CLIENTS), {
+    harnessArn: 'arn:research',
+    reviewerArn: 'arn:reviewer',
+    gatewayUrl: 'https://gw-prod/mcp',
+    kb: { bucket: 'earnings-bucket', id: 'KB1', dataSourceId: 'DS-KB1' },
+  });
+});
+
+test('lookupConfig leaves everything empty for an environment without agents', async () => {
+  assert.deepEqual(await lookupConfig('datathon2026-equipe14-lucas', PROD_CLIENTS), {
+    harnessArn: '', reviewerArn: '', kb: {},
+  });
 });
