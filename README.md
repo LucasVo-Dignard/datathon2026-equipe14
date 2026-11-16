@@ -192,7 +192,7 @@ for %f in (.env-aws .env-dev) do @for /f "usebackq eol=# tokens=1,* delims==" %a
 Les variables ne valent que pour le terminal ouvert : relance la commande dans chaque
 nouveau terminal, et après avoir renouvelé `.env-aws`.
 
-| Variable | Sans elle | Pour |
+| Variable (optionelle) | Sans elle | Pour |
 | --- | --- | --- |
 | `DATABASE_URL` | tout est stocké dans `app/data/db.json` | Utiliser PostgreSQL (par exemple celui de Docker, voir plus bas) |
 | `ALERTS_SENDER` | alertes désactivées | Envoyer les alertes de prix, depuis cette adresse vérifiée dans SES |
