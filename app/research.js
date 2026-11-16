@@ -25,7 +25,8 @@
 //
 // Configuration (environment variables):
 //   RESEARCH_ENV                environment whose agents to use: prod, lucas,
-//                               andre or youcef (unset = research disabled).
+//                               andre or youcef (unset = prod, the only one
+//                               with agents; set by deploy-app.sh on the EC2).
 //                               init() finds them by name, like the resources
 //                               of infra-agents are named.
 // Or, instead of RESEARCH_ENV, each value directly:
@@ -151,13 +152,13 @@ async function lookupConfig(prefix, clients = {}) {
 let ready = null;
 
 /**
- * With RESEARCH_ENV (and no RESEARCH_HARNESS_ARN), finds the agents of that
- * environment. Called once at startup; never throws: on an error, research
+ * Unless RESEARCH_HARNESS_ARN is set, finds the agents of RESEARCH_ENV
+ * (prod by default). Called once at startup; never throws: on an error, research
  * stays disabled. Returns a one-line status for the startup log.
  */
 function init({ env = process.env, log = console, clients } = {}) {
   ready ??= (async () => {
-    const envName = (env.RESEARCH_ENV || '').trim();
+    const envName = (env.RESEARCH_ENV || '').trim() || 'prod';
     if (envName && !config.harnessArn) {
       try {
         Object.assign(config, await lookupConfig(prefixOf(envName), clients));

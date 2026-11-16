@@ -101,7 +101,7 @@ terraform -chdir=infra-agents apply
 La même commande `put-secret-value` sert à changer la clé.
 
 Au démarrage, l'app retrouve ces ressources par leur nom, pour l'environnement donné par
-`RESEARCH_ENV` (posée sur l'EC2 par `scripts/deploy-app.sh`). Sans agents, l'assistant
+`RESEARCH_ENV` (prod par défaut, posée sur l'EC2 par `scripts/deploy-app.sh`). Sans agents, l'assistant
 répond sans recherche.
 
 ## Dépendances
@@ -192,7 +192,7 @@ nouveau terminal, et après avoir renouvelé `.env-aws`.
 | Variable | Sans elle | Pour |
 | --- | --- | --- |
 | `DATABASE_URL` | tout est stocké dans `app/data/db.json` | Utiliser PostgreSQL (par exemple celui de Docker, voir plus bas) |
-| `RESEARCH_ENV` | pas de recherche | En local seulement : environnement dont l'app utilise les agents de recherche (voir [Agents](#agents)) |
+| `RESEARCH_ENV` | agents de prod | Environnement dont l'app utilise les agents de recherche (voir [Agents](#agents)). Inutile en local : prod est le seul qui en a |
 | `ALERTS_SENDER` | alertes désactivées | Envoyer les alertes de prix, depuis cette adresse vérifiée dans SES |
 
 Les principales variables Terraform sont :
