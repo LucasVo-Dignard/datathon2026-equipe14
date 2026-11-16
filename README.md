@@ -101,7 +101,8 @@ terraform -chdir=infra-agents apply
 La même commande `put-secret-value` sert à changer la clé.
 
 Au démarrage, l'app retrouve ces ressources par leur nom, pour l'environnement donné par
-`RESEARCH_ENV` (prod par défaut, posée sur l'EC2 par `scripts/deploy-app.sh`). Sans agents, l'assistant
+`RESEARCH_ENV` (prod par défaut, posée sur l'EC2 par `scripts/deploy-app.sh`). Sur l'EC2,
+il lui faut la permission `find-research-agents` (`infra/iam.tf`). Sans agents, l'assistant
 répond sans recherche.
 
 ## Dépendances
@@ -212,12 +213,23 @@ npm start                      # http://localhost:3000, données dans app/data/d
 ```
 
 Ce qui fonctionne : la connexion, le profil, un portefeuille aléatoire avec de
-vrais cours Yahoo. Ce qui demande AWS ou une base : les vraies
-news (sans base, ce sont des exemples), les alertes, l'assistant et la rédaction
-des rapports (Bedrock). `npm run dev` charge `.env-aws` et `.env-dev` s'ils existent,
-et redémarre l'app à chaque modification.
+vrais cours Yahoo. Sans AWS, pas d'assistant, de rapports, de recherche ni d'alertes ;
+sans base, les news sont des exemples.
 
-### 2. En local avec PostgreSQL (Docker)
+### 2. En local avec AWS
+
+L'app tourne sur ta machine, mais appelle des services AWS : Bedrock (assistant,
+rapports), AgentCore (recherche), Comprehend (ton des news) et SES (alertes).
+
+```bash
+npm run dev                    # charge .env-aws et .env-dev, redémarre à chaque modification
+```
+
+Renouvelle d'abord `.env-aws` (jeton temporaire). Rien d'autre à configurer : la recherche
+utilise les agents de prod (le journal affiche `recherche : active (prod)`), donc leurs
+crédits Bigdata.com et leur base de connaissances.
+
+### 3. En local avec PostgreSQL (Docker)
 
 ```bash
 cd db
@@ -230,7 +242,7 @@ node src/marketdata/jobs/news-refresh.js       # vraies news (identifiants AWS r
 npm start
 ```
 
-### 3. Tests
+### 4. Tests
 
 ```bash
 npm test                                       # les tests qui demandent une base sont sautés
@@ -240,7 +252,7 @@ TEST_DATABASE_URL=postgres://bncd_admin:localdev@127.0.0.1:5432/marketdata npm t
 > Les tests sur base **suppriment et recréent des lignes de test**. Utilise une base
 > jetable, jamais celle d'un environnement AWS.
 
-### 4. Créer un environnement AWS complet (reproduction)
+### 5. Créer un environnement AWS complet (reproduction)
 
 Prérequis : `.env-aws` et `.env-dev` chargés, Docker et Python avec `boto3`.
 L'ordre est important : chaque stack lit les ressources de la précédente.
@@ -262,11 +274,11 @@ alertes partent.
 Les agents (`infra-agents/`) se créent après, avec la clé Bigdata.com à verser dans
 Secrets Manager (voir [Agents](#agents)), puis un nouveau `./scripts/deploy-app.sh`.
 
-### 5. Mettre à jour un environnement
+### 6. Mettre à jour un environnement
 
 | Changement | Commande |
 | --- | --- |
 | Code de l'app (`app/`) | `./scripts/deploy-app.sh` (l'instance n'est pas recréée), et `bash scripts/deploy-batch.sh` si le changement touche les rapports programmés (l'image des jobs contient `app/`) |
 | Code des jobs (`src/`) | `bash scripts/deploy-batch.sh` |
 | Nouvelle migration | `python db/migrate.py info`, puis `python db/migrate.py` |
-| Infrastructure | `terraform -chdir=<stack> plan`, puis `apply` |
+| Infrastructure (dont les permissions de `infra/iam.tf`) | `terraform -chdir=<stack> plan`, puis `apply` |
